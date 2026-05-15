@@ -7,8 +7,17 @@ export default async function ThanksPage({ searchParams }: Props) {
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <header className="border-b border-[var(--qw-border-soft)] bg-white">
-        <div className="mx-auto max-w-3xl px-6 py-5 flex items-center justify-between">
+      <header
+        className="border-b border-[var(--qw-border-soft)] bg-white"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div
+          className="mx-auto max-w-3xl py-3 sm:py-5 flex items-center justify-between"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+          }}
+        >
           <a
             href="https://oshiboriconcept.com"
             target="_blank"
@@ -28,7 +37,14 @@ export default async function ThanksPage({ searchParams }: Props) {
         </div>
       </header>
 
-      <main className="flex-1 flex items-center justify-center px-6 py-16">
+      <main
+        className="flex-1 flex items-center justify-center py-16"
+        style={{
+          paddingLeft: 'max(1.5rem, env(safe-area-inset-left))',
+          paddingRight: 'max(1.5rem, env(safe-area-inset-right))',
+          paddingBottom: 'max(4rem, env(safe-area-inset-bottom))',
+        }}
+      >
         <div className="max-w-xl w-full text-center space-y-6">
           <div
             className="mx-auto w-16 h-16 rounded-full flex items-center justify-center text-3xl"

@@ -21,8 +21,16 @@ function WizardContent() {
   return (
     <div className="h-dvh flex flex-col bg-white overflow-hidden">
       {/* Header sticky — toujours visible */}
-      <header className="shrink-0 border-b border-[var(--qw-border-soft)] bg-white">
-        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-5">
+      <header
+        className="shrink-0 border-b border-[var(--qw-border-soft)] bg-white"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-5"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+          }}
+        >
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <a
               href="https://oshiboriconcept.com"
@@ -48,7 +56,13 @@ function WizardContent() {
 
       {/* Main scrollable area */}
       <main className="flex-1 overflow-y-auto overscroll-contain">
-        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-6 sm:py-10">
+        <div
+          className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-6 sm:py-10"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+          }}
+        >
           {currentStep === 'profile' && <StepProfile />}
           {currentStep === 'product-type' && <StepProductType />}
           {currentStep === 'perso-level' && <StepPersoLevel />}
@@ -64,8 +78,17 @@ function WizardContent() {
       </main>
 
       {/* Footer sticky — toujours visible */}
-      <footer className="shrink-0 border-t border-[var(--qw-border-soft)] bg-white">
-        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-4">
+      <footer
+        className="shrink-0 border-t border-[var(--qw-border-soft)] bg-white"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
+        <div
+          className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-4"
+          style={{
+            paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+            paddingRight: 'max(1rem, env(safe-area-inset-right))',
+          }}
+        >
           <NavBar />
         </div>
       </footer>
