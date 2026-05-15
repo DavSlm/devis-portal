@@ -7,7 +7,7 @@ import { PACKAGINGS } from '@/lib/pricing/data';
 import type { Packaging } from '@/types/wizard';
 
 export function StepPackaging() {
-  const { state, set } = useWizard();
+  const { state, pick } = useWizard();
 
   let items: Packaging[] = [];
   let title = 'Emballage';
@@ -38,7 +38,7 @@ export function StepPackaging() {
             ghostChips={item.note ? [item.note] : undefined}
             selected={state.packagingId === item.id}
             onClick={() =>
-              set({
+              pick({
                 packagingId: item.id,
                 packaging: `${item.label} — ${item.sub}`,
               })

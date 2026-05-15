@@ -42,7 +42,7 @@ const VARIANTS: Variant[] = [
 ];
 
 export function StepCategoryNeutre() {
-  const { state, set } = useWizard();
+  const { state, pick } = useWizard();
 
   return (
     <div className="space-y-8">
@@ -62,7 +62,7 @@ export function StepCategoryNeutre() {
             meta={v.meta}
             selected={state.category === v.category}
             onClick={() =>
-              set({
+              pick({
                 category: v.category,
                 grammage: v.grammage,
                 packaging: null,

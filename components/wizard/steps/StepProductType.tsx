@@ -4,7 +4,7 @@ import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
 
 export function StepProductType() {
-  const { state, set } = useWizard();
+  const { state, pick } = useWizard();
 
   return (
     <div className="space-y-8">
@@ -19,7 +19,7 @@ export function StepProductType() {
           title="Oshibori"
           desc="Serviettes rafraîchissantes individuelles, neutres ou personnalisées."
           selected={state.productType === 'Oshibori'}
-          onClick={() => set({ productType: 'Oshibori', category: null })}
+          onClick={() => pick({ productType: 'Oshibori', category: null })}
         />
         <ProductCard
           icon="⌷"
@@ -27,7 +27,7 @@ export function StepProductType() {
           desc="Plateaux 1×10 serviettes sèches, prêts à servir."
           selected={state.productType === 'Plateaux'}
           onClick={() =>
-            set({
+            pick({
               productType: 'Plateaux',
               persoLevel: 'Neutre',
               category: 'Plateaux 1x10 Serviettes Sèches',

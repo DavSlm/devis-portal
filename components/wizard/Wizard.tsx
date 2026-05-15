@@ -19,10 +19,11 @@ function WizardContent() {
   const { currentStep } = useWizard();
 
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <header className="border-b border-[var(--qw-border-soft)] bg-white">
-        <div className="mx-auto max-w-3xl px-6 py-5">
-          <div className="flex items-center justify-between mb-4">
+    <div className="h-dvh flex flex-col bg-white overflow-hidden">
+      {/* Header sticky — toujours visible */}
+      <header className="shrink-0 border-b border-[var(--qw-border-soft)] bg-white">
+        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-5">
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
             <a
               href="https://oshiboriconcept.com"
               target="_blank"
@@ -34,10 +35,10 @@ function WizardContent() {
               <img
                 src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png"
                 alt="Oshibori Concept"
-                className="h-12 w-auto"
+                className="h-9 sm:h-12 w-auto"
               />
             </a>
-            <span className="text-xs uppercase tracking-[0.08em] text-gold-dark">
+            <span className="text-[10px] sm:text-xs uppercase tracking-[0.08em] text-gold-dark">
               Devis personnalisé
             </span>
           </div>
@@ -45,8 +46,9 @@ function WizardContent() {
         </div>
       </header>
 
-      <main className="flex-1">
-        <div className="mx-auto max-w-3xl px-6 py-10">
+      {/* Main scrollable area */}
+      <main className="flex-1 overflow-y-auto overscroll-contain">
+        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-6 sm:py-10">
           {currentStep === 'profile' && <StepProfile />}
           {currentStep === 'product-type' && <StepProductType />}
           {currentStep === 'perso-level' && <StepPersoLevel />}
@@ -61,8 +63,9 @@ function WizardContent() {
         </div>
       </main>
 
-      <footer className="bg-white sticky bottom-0">
-        <div className="mx-auto max-w-3xl px-6 py-4">
+      {/* Footer sticky — toujours visible */}
+      <footer className="shrink-0 border-t border-[var(--qw-border-soft)] bg-white">
+        <div className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-3 sm:py-4">
           <NavBar />
         </div>
       </footer>

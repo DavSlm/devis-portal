@@ -11,10 +11,10 @@ const SEMI_IMG = `${CDN}oshiboriconceptsemiperso_dd364f87-3c4e-43f4-a5d0-33895f6
 const FULL_IMG = `${CDN}Capture_d_ecran_2026-03-19_a_15.53.21.png?v=1773932013`;
 
 export function StepPersoLevel() {
-  const { state, set } = useWizard();
+  const { state, pick } = useWizard();
 
-  const pick = (level: PersoLevel) =>
-    set({
+  const select = (level: PersoLevel) =>
+    pick({
       persoLevel: level,
       // Reset downstream state when level changes
       category: null,
@@ -40,7 +40,7 @@ export function StepPersoLevel() {
           chips={['Stock disponible']}
           ghostChips={['Délai 3 jours ouvrés']}
           selected={state.persoLevel === 'Neutre'}
-          onClick={() => pick('Neutre')}
+          onClick={() => select('Neutre')}
         />
         <PickCard
           imageUrl={SEMI_IMG}
@@ -49,7 +49,7 @@ export function StepPersoLevel() {
           desc="Votre logo apposé sur nos emballages existants. Impression manuelle, 15 ou 10 grammes."
           ghostChips={['MOQ 50 · Délai 15–20 jours']}
           selected={state.persoLevel === 'Semi-perso'}
-          onClick={() => pick('Semi-perso')}
+          onClick={() => select('Semi-perso')}
         />
         <PickCard
           imageUrl={FULL_IMG}
@@ -58,7 +58,7 @@ export function StepPersoLevel() {
           desc="Emballage 100% sur mesure, matière et parfum au choix. Impression industrielle."
           ghostChips={['MOQ 18 000 · 30 000 pour 6 g']}
           selected={state.persoLevel === 'Full perso'}
-          onClick={() => pick('Full perso')}
+          onClick={() => select('Full perso')}
         />
       </div>
     </div>

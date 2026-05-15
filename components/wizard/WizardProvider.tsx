@@ -4,8 +4,11 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import { initialState, type WizardState } from '@/types/wizard';
@@ -29,6 +32,12 @@ function reducer(state: WizardState, action: Action): WizardState {
 interface WizardContextValue {
   state: WizardState;
   set: (patch: Partial<WizardState>) => void;
+  /**
+   * Like set() but also schedules an auto-advance to the next step
+   * once React has committed the new state. Use for single-select card
+   * pickers where clicking an option implies "I'm done with this step".
+   */
+  pick: (patch: Partial<WizardState>) => void;
   reset: () => void;
 
   flow: StepId[];
@@ -51,15 +60,26 @@ interface WizardProviderProps {
   initialStep?: StepId;
 }
 
+// Small visual pause after picking so the user sees their selection before
+// the screen transitions.
+const AUTO_ADVANCE_DELAY_MS = 220;
+
 export function WizardProvider({ children, initialStep }: WizardProviderProps) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [currentStep, setCurrentStep] = useReducer(
     (_: StepId, next: StepId) => next,
     initialStep ?? 'profile',
   );
+  const [pendingAdvance, setPendingAdvance] = useState(false);
+  const advanceTimerRef = useRef<number | null>(null);
 
   const set = useCallback((patch: Partial<WizardState>) => {
     dispatch({ type: 'SET', patch });
+  }, []);
+
+  const pick = useCallback((patch: Partial<WizardState>) => {
+    dispatch({ type: 'SET', patch });
+    setPendingAdvance(true);
   }, []);
 
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
@@ -87,9 +107,29 @@ export function WizardProvider({ children, initialStep }: WizardProviderProps) {
     [flow],
   );
 
+  // Auto-advance handler: runs after a pick() once state is committed.
+  useEffect(() => {
+    if (!pendingAdvance) return;
+    setPendingAdvance(false);
+    if (!advanceable) return;
+    const nextStep = flow[safeIndex + 1];
+    if (!nextStep) return;
+    if (advanceTimerRef.current) window.clearTimeout(advanceTimerRef.current);
+    advanceTimerRef.current = window.setTimeout(() => {
+      setCurrentStep(nextStep);
+    }, AUTO_ADVANCE_DELAY_MS);
+  }, [pendingAdvance, advanceable, flow, safeIndex]);
+
+  useEffect(() => {
+    return () => {
+      if (advanceTimerRef.current) window.clearTimeout(advanceTimerRef.current);
+    };
+  }, []);
+
   const value: WizardContextValue = {
     state,
     set,
+    pick,
     reset,
     flow,
     currentStep: flow[safeIndex] ?? flow[0],

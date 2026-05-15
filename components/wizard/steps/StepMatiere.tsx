@@ -6,9 +6,9 @@ import { PickCard } from '../PickCard';
 import type { Matiere } from '@/types/wizard';
 
 export function StepMatiere() {
-  const { state, set } = useWizard();
+  const { state, pick: pickFromCtx } = useWizard();
 
-  const pick = (matiere: Matiere) => set({ matiere });
+  const select = (matiere: Matiere) => pickFromCtx({ matiere });
 
   return (
     <div className="space-y-8">
@@ -23,7 +23,7 @@ export function StepMatiere() {
           title="100% Coton"
           desc="Notre matière standard, douce et absorbante."
           selected={state.matiere === '100% Coton'}
-          onClick={() => pick('100% Coton')}
+          onClick={() => select('100% Coton')}
         />
         <PickCard
           icon="◑"
@@ -31,7 +31,7 @@ export function StepMatiere() {
           desc="Mélange premium, encore plus soft au toucher."
           ghostChips={['+ 0,10 € / unité']}
           selected={state.matiere === '80% Bambou - 20% Coton'}
-          onClick={() => pick('80% Bambou - 20% Coton')}
+          onClick={() => select('80% Bambou - 20% Coton')}
         />
       </div>
     </div>

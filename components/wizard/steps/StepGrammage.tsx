@@ -39,7 +39,7 @@ const ALL: Option[] = [
 ];
 
 export function StepGrammage() {
-  const { state, set } = useWizard();
+  const { state, pick } = useWizard();
   const isFull = state.persoLevel === 'Full perso';
   const isSemi = state.persoLevel === 'Semi-perso';
 
@@ -73,7 +73,7 @@ export function StepGrammage() {
             ghostChips={o.chip ? [o.chip] : undefined}
             selected={state.grammage === o.value}
             onClick={() =>
-              set({
+              pick({
                 grammage: o.value,
                 matiere: null,
                 packaging: null,
