@@ -15,9 +15,25 @@ function WizardContent() {
       <header className="border-b border-[var(--qw-border-soft)] bg-white">
         <div className="mx-auto max-w-3xl px-6 py-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="font-semibold tracking-tight text-ink">
-              Oshibori Concept
-            </div>
+            <a
+              href="https://oshibori-concept.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col leading-none"
+              aria-label="Oshibori Concept — site officiel"
+            >
+              <span
+                className="text-[13px] font-medium uppercase tracking-[0.22em] text-ink"
+              >
+                Oshibori Concept
+              </span>
+              <span
+                className="mt-1 text-[10px] tracking-[0.08em]"
+                style={{ color: 'rgba(37, 37, 37, 0.45)' }}
+              >
+                お絞り
+              </span>
+            </a>
             <span className="text-xs uppercase tracking-[0.08em] text-gold-dark">
               Devis personnalisé
             </span>
