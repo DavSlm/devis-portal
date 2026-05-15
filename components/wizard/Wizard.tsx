@@ -5,6 +5,10 @@ import { ProgressBar } from './ProgressBar';
 import { NavBar } from './NavBar';
 import { StepProfile } from './steps/StepProfile';
 import { StepProductType } from './steps/StepProductType';
+import { StepPersoLevel } from './steps/StepPersoLevel';
+import { StepCategoryNeutre } from './steps/StepCategoryNeutre';
+import { StepGrammage } from './steps/StepGrammage';
+import { StepMatiere } from './steps/StepMatiere';
 import { StepPlaceholder } from './steps/StepPlaceholder';
 
 function WizardContent() {
@@ -41,9 +45,15 @@ function WizardContent() {
         <div className="mx-auto max-w-3xl px-6 py-10">
           {currentStep === 'profile' && <StepProfile />}
           {currentStep === 'product-type' && <StepProductType />}
-          {currentStep !== 'profile' && currentStep !== 'product-type' && (
-            <StepPlaceholder step={currentStep} />
-          )}
+          {currentStep === 'perso-level' && <StepPersoLevel />}
+          {currentStep === 'category-neutre' && <StepCategoryNeutre />}
+          {currentStep === 'grammage' && <StepGrammage />}
+          {currentStep === 'matiere-full-15g' && <StepMatiere />}
+          {(currentStep === 'packaging' ||
+            currentStep === 'brief' ||
+            currentStep === 'quantity' ||
+            currentStep === 'shipping' ||
+            currentStep === 'summary') && <StepPlaceholder step={currentStep} />}
         </div>
       </main>
 

@@ -8,7 +8,7 @@ export type StepId =
   | 'product-type'
   | 'perso-level'
   | 'category-neutre'
-  | 'grammage-full'
+  | 'grammage'
   | 'matiere-full-15g'
   | 'packaging'
   | 'brief'
@@ -27,9 +27,9 @@ export function computeFlow(state: WizardState): StepId[] {
       steps.push('category-neutre', 'packaging');
     } else if (state.persoLevel === 'Semi-perso') {
       // Choose 15g or 10g, then packaging.
-      steps.push('grammage-full', 'packaging', 'brief');
+      steps.push('grammage', 'packaging', 'brief');
     } else if (state.persoLevel === 'Full perso') {
-      steps.push('grammage-full');
+      steps.push('grammage');
       if (state.grammage === '15 grammes') steps.push('matiere-full-15g');
       steps.push('brief');
     }
@@ -64,7 +64,7 @@ export function canAdvance(step: StepId, state: WizardState): boolean {
     case 'category-neutre':
       return !!state.category;
 
-    case 'grammage-full':
+    case 'grammage':
       return !!state.grammage;
 
     case 'matiere-full-15g':
@@ -102,7 +102,7 @@ export const STEP_LABELS: Record<StepId, string> = {
   'product-type': 'Produit',
   'perso-level': 'Personnalisation',
   'category-neutre': 'Variante',
-  'grammage-full': 'Grammage',
+  'grammage': 'Grammage',
   'matiere-full-15g': 'Matière',
   packaging: 'Emballage',
   brief: 'Brief',
