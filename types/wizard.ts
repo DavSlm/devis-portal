@@ -40,6 +40,7 @@ export interface WizardState {
   brief: string;
   fileName: string;
   fileUrl?: string;
+  attachmentFile: File | null;
 
   // Quantity + options
   quantity: number | null;
@@ -90,6 +91,7 @@ export const initialState: WizardState = {
   scenteur: null,
   brief: '',
   fileName: '',
+  attachmentFile: null,
   quantity: null,
   greenFormula: false,
   deliveryContactName: '',

@@ -9,7 +9,11 @@ import { StepPersoLevel } from './steps/StepPersoLevel';
 import { StepCategoryNeutre } from './steps/StepCategoryNeutre';
 import { StepGrammage } from './steps/StepGrammage';
 import { StepMatiere } from './steps/StepMatiere';
-import { StepPlaceholder } from './steps/StepPlaceholder';
+import { StepPackaging } from './steps/StepPackaging';
+import { StepBrief } from './steps/StepBrief';
+import { StepQuantity } from './steps/StepQuantity';
+import { StepShipping } from './steps/StepShipping';
+import { StepSummary } from './steps/StepSummary';
 
 function WizardContent() {
   const { currentStep } = useWizard();
@@ -49,11 +53,11 @@ function WizardContent() {
           {currentStep === 'category-neutre' && <StepCategoryNeutre />}
           {currentStep === 'grammage' && <StepGrammage />}
           {currentStep === 'matiere-full-15g' && <StepMatiere />}
-          {(currentStep === 'packaging' ||
-            currentStep === 'brief' ||
-            currentStep === 'quantity' ||
-            currentStep === 'shipping' ||
-            currentStep === 'summary') && <StepPlaceholder step={currentStep} />}
+          {currentStep === 'packaging' && <StepPackaging />}
+          {currentStep === 'brief' && <StepBrief />}
+          {currentStep === 'quantity' && <StepQuantity />}
+          {currentStep === 'shipping' && <StepShipping />}
+          {currentStep === 'summary' && <StepSummary />}
         </div>
       </main>
 

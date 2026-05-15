@@ -16,14 +16,16 @@ export function NavBar() {
         ← Précédent
       </button>
 
-      <button
-        type="button"
-        onClick={next}
-        disabled={!canAdvance || isLast}
-        className="px-6 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:bg-[var(--qw-cream-strong)] disabled:text-ink-soft disabled:shadow-none disabled:cursor-not-allowed transition-all"
-      >
-        {isLast ? 'Envoyer ma demande' : 'Suivant →'}
-      </button>
+      {!isLast && (
+        <button
+          type="button"
+          onClick={next}
+          disabled={!canAdvance}
+          className="px-6 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:bg-[var(--qw-cream-strong)] disabled:text-ink-soft disabled:shadow-none disabled:cursor-not-allowed transition-all"
+        >
+          Suivant →
+        </button>
+      )}
     </nav>
   );
 }
