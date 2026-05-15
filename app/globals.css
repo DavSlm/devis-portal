@@ -1,26 +1,172 @@
 @import "tailwindcss";
 
+/* =====================================================
+   Design tokens — Oshibori Concept
+   Source : contact-form-wizard.liquid (palette gold/cream)
+   ===================================================== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette */
+  --qw-gold: #d1b780;
+  --qw-gold-dark: #b89456;
+  --qw-gold-light: #f1ecdb;
+  --qw-cream: #f5efe0;
+  --qw-cream-strong: #efe7d2;
+
+  /* Ink */
+  --qw-ink: #252525;
+  --qw-ink-soft: rgba(37, 37, 37, 0.55);
+  --qw-bg: #ffffff;
+  --qw-border-soft: rgba(0, 0, 0, 0.13);
+
+  /* Feedback */
+  --qw-error: #ef4444;
+  --qw-success: #198754;
+
+  /* Radii */
+  --qw-input-radius: 6px;
+  --qw-card-radius: 8px;
+  --qw-btn-radius: 6px;
+
+  /* Spacing */
+  --qw-gap: 2.4rem;
+  --qw-gap-sm: 1.4rem;
+
+  /* Shadows */
+  --qw-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --qw-shadow-md: 0 12px 32px -10px rgba(209, 183, 128, 0.25);
+
+  /* Motion */
+  --qw-easing: ease-in-out;
+  --qw-speed: 0.15s;
 }
 
+/* Tailwind v4 theme — expose tokens as utility colors */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-gold: var(--qw-gold);
+  --color-gold-dark: var(--qw-gold-dark);
+  --color-gold-light: var(--qw-gold-light);
+  --color-cream: var(--qw-cream);
+  --color-cream-strong: var(--qw-cream-strong);
+  --color-ink: var(--qw-ink);
+  --color-ink-soft: var(--qw-ink-soft);
+  --color-success: var(--qw-success);
+  --color-error: var(--qw-error);
+
+  --radius-input: var(--qw-input-radius);
+  --radius-card: var(--qw-card-radius);
+  --radius-btn: var(--qw-btn-radius);
+
+  --shadow-soft: var(--qw-shadow-sm);
+  --shadow-card: var(--qw-shadow-md);
+
+  --font-sans: var(--font-raleway), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Base */
+html,
+body {
+  background: var(--qw-bg);
+  color: var(--qw-ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-raleway), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Heading defaults */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-raleway), -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-weight: 600;
+  color: var(--qw-ink);
+  letter-spacing: -0.01em;
+}
+
+/* Form reset niceties */
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--qw-gold);
+  outline-offset: 2px;
+}
+
+/* Reusable wizard primitives — replicated minimally from the Liquid wizard */
+.qw-input {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--qw-border-soft);
+  border-radius: var(--qw-input-radius);
+  background: #fff;
+  transition: border-color var(--qw-speed) var(--qw-easing),
+    box-shadow var(--qw-speed) var(--qw-easing);
+}
+.qw-input:focus {
+  border-color: var(--qw-gold);
+  box-shadow: 0 0 0 3px rgba(209, 183, 128, 0.18);
+  outline: none;
+}
+.qw-input.is-invalid {
+  border-color: var(--qw-error);
+}
+
+.qw-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--qw-ink-soft);
+  margin-bottom: 0.4rem;
+}
+
+.qw-req::before {
+  content: " *";
+  color: var(--qw-error);
+}
+
+.qw-card-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1.6rem 1.4rem;
+  background: #fff;
+  border: 1px solid var(--qw-border-soft);
+  border-radius: var(--qw-card-radius);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--qw-speed) var(--qw-easing),
+    background var(--qw-speed) var(--qw-easing),
+    box-shadow var(--qw-speed) var(--qw-easing),
+    transform var(--qw-speed) var(--qw-easing);
+}
+.qw-card-pick:hover {
+  border-color: var(--qw-gold);
+  background: var(--qw-cream);
+  box-shadow: var(--qw-shadow-md);
+}
+.qw-card-pick.is-selected {
+  border-color: var(--qw-gold-dark);
+  background: var(--qw-cream);
+  box-shadow: var(--qw-shadow-md);
+}
+.qw-card-pick:active {
+  transform: translateY(1px);
 }
