@@ -5,7 +5,7 @@ import { isAdminEmail } from '@/lib/admin/check';
 
 export const dynamic = 'force-dynamic';
 
-export default async function AdminLayout({
+export default async function AdminAuthedLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const supabase = await createClient();
@@ -13,29 +13,10 @@ export default async function AdminLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Login page itself is allowed unauthenticated. We can't easily check the
-  // pathname from a layout, so we render children unconditionally and rely on
-  // the page logic itself. But we DO want to redirect from /admin/* (children)
-  // when not logged in.
-  // Solution: nested route group — the login page lives at /admin/login and
-  // uses a layout outside this one. Simpler: detect via headers.
-  // For now, gate based on user + admin allowlist. The login page is reached
-  // via the redirect below.
-
-  const path = await getRequestPath();
-  const isLoginPage = path === '/admin/login';
-
-  if (!isLoginPage) {
-    if (!user) redirect('/admin/login');
-    if (!isAdminEmail(user.email)) {
-      // Authenticated but not on the allowlist — sign out and redirect.
-      await supabase.auth.signOut();
-      redirect('/admin/login?error=not_authorized');
-    }
-  }
-
-  if (isLoginPage) {
-    return <>{children}</>;
+  if (!user) redirect('/admin/login');
+  if (!isAdminEmail(user.email)) {
+    await supabase.auth.signOut();
+    redirect('/admin/login?error=not_authorized');
   }
 
   return (
@@ -60,7 +41,7 @@ export default async function AdminLayout({
             </span>
           </Link>
           <div className="flex items-center gap-3 text-sm">
-            <span className="hidden sm:inline text-ink-soft">{user?.email}</span>
+            <span className="hidden sm:inline text-ink-soft">{user.email}</span>
             <form action={signOut}>
               <button
                 type="submit"
@@ -91,18 +72,4 @@ async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect('/admin/login');
-}
-
-// Derives the current request path from the headers Next.js exposes.
-// (no useful direct API yet — but x-invoke-path / x-pathname are set by the runtime)
-async function getRequestPath(): Promise<string> {
-  const { headers } = await import('next/headers');
-  const h = await headers();
-  return (
-    h.get('x-invoke-path') ||
-    h.get('next-url') ||
-    h.get('x-pathname') ||
-    h.get('x-url') ||
-    ''
-  );
 }
