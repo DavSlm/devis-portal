@@ -1,0 +1,246 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { Resend } from 'resend';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { formatEuro } from '@/lib/pricing';
+
+interface CreateQuoteInput {
+  requestId: string;
+  unitPrice: number;
+  quantity: number;
+  vatRate: number;
+  deliveryDelayDays: number | null;
+  conditions: string;
+  expiresInDays: number;
+}
+
+const FROM_ADDRESS = 'Devis Oshibori <onboarding@resend.dev>';
+
+export async function updateInternalNotes(formData: FormData) {
+  const id = String(formData.get('id'));
+  const notes = String(formData.get('internal_notes') ?? '');
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({ internal_notes: notes })
+    .eq('id', id);
+  revalidatePath(`/admin/quotes/${id}`);
+}
+
+export async function archiveRequest(formData: FormData) {
+  const id = String(formData.get('id'));
+  const supabase = createAdminClient();
+  await supabase.from('quote_requests').update({ status: 'archived' }).eq('id', id);
+  redirect('/admin');
+}
+
+export async function createAndSendQuote(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId'));
+  const unitPrice = parseFloat(String(formData.get('unitPrice') ?? '0'));
+  const quantity = parseInt(String(formData.get('quantity') ?? '0'), 10);
+  const vatRate = parseFloat(String(formData.get('vatRate') ?? '20'));
+  const deliveryDelayDays = parseIntOrNull(String(formData.get('deliveryDelayDays') ?? ''));
+  const conditions = String(formData.get('conditions') ?? '');
+  const expiresInDays = parseInt(String(formData.get('expiresInDays') ?? '30'), 10);
+
+  if (!requestId) throw new Error('requestId manquant');
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw new Error('Prix invalide');
+  if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Quantité invalide');
+
+  await createAndSendQuoteImpl({
+    requestId,
+    unitPrice,
+    quantity,
+    vatRate,
+    deliveryDelayDays,
+    conditions,
+    expiresInDays,
+  });
+
+  revalidatePath('/admin');
+  revalidatePath(`/admin/quotes/${requestId}`);
+  redirect(`/admin/quotes/${requestId}?sent=1`);
+}
+
+async function createAndSendQuoteImpl(input: CreateQuoteInput) {
+  const supabase = createAdminClient();
+
+  // Load the source request.
+  const { data: request, error: reqErr } = await supabase
+    .from('quote_requests')
+    .select('*')
+    .eq('id', input.requestId)
+    .single();
+  if (reqErr || !request) throw new Error(`Demande introuvable: ${reqErr?.message}`);
+
+  // Compute totals.
+  const subtotalHt = Number((input.unitPrice * input.quantity).toFixed(2));
+  const vatAmount = Number(((subtotalHt * input.vatRate) / 100).toFixed(2));
+  const totalTtc = Number((subtotalHt + vatAmount).toFixed(2));
+
+  // Quote number: DV-YYYYMMDD-NNNN where NNNN is the sequence for the day.
+  const today = new Date();
+  const dayStart = new Date(today);
+  dayStart.setHours(0, 0, 0, 0);
+  const { count } = await supabase
+    .from('quotes')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', dayStart.toISOString());
+  const dayCode = today.toISOString().slice(0, 10).replace(/-/g, '');
+  const quoteNumber = `DV-${dayCode}-${String((count || 0) + 1).padStart(4, '0')}`;
+
+  // Expiry.
+  const expiresAt = new Date(today);
+  expiresAt.setDate(expiresAt.getDate() + input.expiresInDays);
+
+  // Insert quote.
+  const { data: quote, error: insErr } = await supabase
+    .from('quotes')
+    .insert({
+      quote_number: quoteNumber,
+      quote_request_id: request.id,
+      email: request.email,
+      full_name: request.full_name,
+      company_name: request.company_name,
+      product_type: request.product_type,
+      config: {
+        category: request.category,
+        perso_level: request.perso_level,
+        grammage: request.grammage,
+        matiere: request.matiere,
+        packaging: request.packaging,
+        brief: request.brief,
+        file_url: request.file_url,
+      },
+      unit_price: input.unitPrice,
+      quantity: input.quantity,
+      subtotal_ht: subtotalHt,
+      vat_rate: input.vatRate,
+      vat_amount: vatAmount,
+      total_ttc: totalTtc,
+      conditions: input.conditions || null,
+      delivery_delay_days: input.deliveryDelayDays,
+      sent_at: new Date().toISOString(),
+      expires_at: expiresAt.toISOString(),
+      status: 'sent',
+    })
+    .select('id, quote_number')
+    .single();
+
+  if (insErr || !quote) throw new Error(`Erreur insertion devis: ${insErr?.message}`);
+
+  // Mark the source request as converted.
+  await supabase
+    .from('quote_requests')
+    .update({ status: 'converted' })
+    .eq('id', request.id);
+
+  // Generate a Supabase magic link for the client, then send via Resend so the
+  // email is on-brand. The link redirects to /auth/callback which sets the
+  // session cookie and forwards to /quotes/[id].
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? 'https://devis-portal-vpmx.vercel.app';
+  const { data: linkData, error: linkErr } = await supabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email: request.email,
+    options: {
+      redirectTo: `${appUrl}/auth/callback?next=/quotes/${quote.id}`,
+    },
+  });
+  if (linkErr) {
+    console.error('generateLink error', linkErr);
+    // Don't bail — the quote is created. Admin can resend manually.
+  }
+
+  const magicLink = linkData?.properties?.action_link;
+
+  if (process.env.RESEND_API_KEY && magicLink) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: request.email,
+        subject: `Votre devis ${quote.quote_number} — Oshibori Concept`,
+        html: renderClientEmail({
+          customerName: request.full_name ?? '',
+          companyName: request.company_name ?? '',
+          quoteNumber: quote.quote_number,
+          totalHt: subtotalHt,
+          link: magicLink,
+        }),
+      });
+    } catch (err) {
+      console.error('Resend send to client failed', err);
+    }
+  }
+}
+
+function parseIntOrNull(s: string): number | null {
+  const v = parseInt(s, 10);
+  return Number.isFinite(v) ? v : null;
+}
+
+interface ClientEmailArgs {
+  customerName: string;
+  companyName: string;
+  quoteNumber: string;
+  totalHt: number;
+  link: string;
+}
+
+function renderClientEmail({
+  customerName,
+  companyName,
+  quoteNumber,
+  totalHt,
+  link,
+}: ClientEmailArgs): string {
+  const greet = customerName ? `Bonjour ${escapeHtml(customerName)},` : 'Bonjour,';
+  const co = companyName ? ` (${escapeHtml(companyName)})` : '';
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png" alt="Oshibori Concept" style="height: 48px; width: auto;">
+  </div>
+  <h1 style="font-size: 20px; font-weight: 600; margin: 0 0 16px; color: #252525; text-align: center;">
+    Votre devis est prêt
+  </h1>
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+    Nous avons préparé votre devis personnalisé${co}.
+    Vous pouvez le consulter, télécharger le PDF et l&apos;accepter en ligne&nbsp;:
+  </p>
+  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 20px; margin: 0 0 24px; text-align: center;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
+      Référence
+    </div>
+    <div style="font-size: 16px; font-weight: 600; color: #252525; margin-bottom: 12px;">
+      ${escapeHtml(quoteNumber)}
+    </div>
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
+      Total HT
+    </div>
+    <div style="font-size: 24px; font-weight: 600; color: #252525;">
+      ${formatEuro(totalHt)}
+    </div>
+  </div>
+  <div style="text-align: center; margin: 0 0 24px;">
+    <a href="${escapeHtml(link)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
+      Voir mon devis
+    </a>
+  </div>
+  <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
+    Ce lien sécurisé expire dans 24 h. Vous pouvez en redemander un à tout moment.
+  </p>
+</div>`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}

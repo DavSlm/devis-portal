@@ -140,3 +140,42 @@ J'initialise git localement, fais le premier commit. Toi tu pousses (ou je te do
 ---
 
 **Prochaine action : Étape 1 (upgrade Node).** Dis-moi quand c'est fait.
+
+---
+
+## Étape 11 — Activer le dashboard admin 🧑 (Sprint 2)
+
+Une fois Sprint 2 déployé, deux configs Supabase à faire avant de pouvoir te connecter.
+
+### 11.1 — Allowlist des redirect URLs
+
+1. Va sur ton projet Supabase → **Authentication → URL Configuration**
+2. Dans **Site URL**, mets : `https://devis-portal-vpmx.vercel.app`
+3. Dans **Redirect URLs**, ajoute (un par ligne) :
+   - `https://devis-portal-vpmx.vercel.app/auth/callback`
+   - `http://localhost:3000/auth/callback` (pour le dev en local)
+4. Sauvegarde
+
+Sans ça, Supabase refuse les magic links → tu reçois une erreur après avoir cliqué le lien dans ton email.
+
+### 11.2 — (Optionnel mais recommandé) SMTP Resend pour les emails Supabase
+
+Par défaut, Supabase envoie depuis `noreply@mail.supabase.io` avec une limite de 3 emails/heure. Pour utiliser Resend (et envoyer depuis un domaine pro) :
+
+1. Supabase → **Authentication → Emails → SMTP Settings → Enable Custom SMTP**
+2. Host : `smtp.resend.com`
+3. Port : `465`
+4. User : `resend`
+5. Password : ta clé API Resend (`re_…`)
+6. Sender email : `onboarding@resend.dev` (provisoire, jusqu'à vérification du domaine `oshibori-concept.com`)
+
+### 11.3 — Variable env `ADMIN_EMAILS` sur Vercel
+
+Pour ajouter d'autres admins (ton équipe) sans toucher au code :
+
+1. Vercel → Project Settings → Environment Variables
+2. Ajoute `ADMIN_EMAILS` avec en valeur la liste séparée par virgules, ex. :
+   `dasalama@icloud.com,david@oshibori-concept.com,equipe@oshibori-concept.com`
+3. Redéploie
+
+Si la variable n'est pas définie, seul `dasalama@icloud.com` est autorisé (fallback codé en dur).
