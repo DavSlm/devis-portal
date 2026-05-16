@@ -131,14 +131,21 @@ async function notifyAdminOfAction({ action, quote, reason }: NotifyArgs) {
   }
 }
 
-export async function requestAccessLink(formData: FormData): Promise<void> {
-  const id = String(formData.get('id') ?? '');
-  const email = String(formData.get('email') ?? '').trim().toLowerCase();
-  if (!id || !email) redirect(`/quotes/${id}/access?error=invalid`);
+/**
+ * Request an OTP code to access a quote.
+ *
+ * Returns { ok } instead of redirecting so the client component can
+ * advance to the "enter code" step. The same response is returned no
+ * matter whether the email/quote pair exists, to avoid leaking that.
+ */
+export async function requestAccessOtp(input: {
+  quoteId: string;
+  email: string;
+}): Promise<{ ok: true }> {
+  const id = (input.quoteId ?? '').trim();
+  const email = (input.email ?? '').trim().toLowerCase();
+  if (!id || !email) return { ok: true };
 
-  // Look up the quote with the admin client; only send a link if the email
-  // matches. We deliberately return the same response regardless to avoid
-  // leaking whether the quote/email pair exists.
   const admin = createAdminClient();
   const { data: quote } = await admin
     .from('quotes')
@@ -147,7 +154,8 @@ export async function requestAccessLink(formData: FormData): Promise<void> {
     .single();
 
   if (!quote || quote.email.toLowerCase() !== email) {
-    redirect(`/quotes/${id}/access?sent=1`);
+    // Same response either way.
+    return { ok: true };
   }
 
   const appUrl =
@@ -155,47 +163,45 @@ export async function requestAccessLink(formData: FormData): Promise<void> {
   const { data: linkData, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
-    options: {
-      // Path-based redirect — survives Supabase Auth's query-param handling.
-      redirectTo: `${appUrl}/quotes/${id}/auth`,
-    },
+    options: { redirectTo: `${appUrl}/quotes/${id}/auth` },
   });
 
   if (error) {
-    redirect(`/quotes/${id}/access?error=${encodeURIComponent(error.message)}`);
+    console.error('requestAccessOtp: generateLink failed', error);
+    return { ok: true };
   }
 
+  const otp = linkData?.properties?.email_otp;
   const magicLink = linkData?.properties?.action_link;
 
-  // generateLink only *generates* the URL; it does NOT send the email.
-  // We deliver it ourselves via Resend.
-  if (process.env.RESEND_API_KEY && magicLink) {
+  if (process.env.RESEND_API_KEY && otp) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: FROM_ADDRESS,
         to: quote.email,
-        subject: `Accès à votre devis ${quote.quote_number} — Oshibori Concept`,
+        subject: `Code d'accès — Devis ${quote.quote_number} Oshibori Concept`,
         html: renderAccessEmail({
           customerName: quote.full_name ?? '',
           companyName: quote.company_name ?? '',
           quoteNumber: quote.quote_number,
-          link: magicLink,
+          code: otp,
+          link: magicLink ?? '',
         }),
       });
     } catch (err) {
-      // Log silently — show the same UI either way to avoid leaking info.
-      console.error('requestAccessLink: Resend send failed', err);
+      console.error('requestAccessOtp: Resend send failed', err);
     }
   }
 
-  redirect(`/quotes/${id}/access?sent=1`);
+  return { ok: true };
 }
 
 interface AccessEmailArgs {
   customerName: string;
   companyName: string;
   quoteNumber: string;
+  code: string;
   link: string;
 }
 
@@ -203,31 +209,43 @@ function renderAccessEmail({
   customerName,
   companyName,
   quoteNumber,
+  code,
   link,
 }: AccessEmailArgs): string {
   const greet = customerName ? `Bonjour ${escape(customerName)},` : 'Bonjour,';
   const co = companyName ? ` (${escape(companyName)})` : '';
+  const linkBlock = link
+    ? `<div style="text-align: center; margin: 24px 0 8px;">
+        <a href="${escape(link)}" style="font-size: 12px; color: #B89456; text-decoration: underline;">
+          Ou cliquez ici pour accéder directement à votre devis
+        </a>
+      </div>`
+    : '';
   return `
 <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
   <div style="text-align: center; margin-bottom: 24px;">
     <img src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png" alt="Oshibori Concept" style="height: 48px; width: auto;">
   </div>
   <h1 style="font-size: 20px; font-weight: 600; margin: 0 0 16px; color: #252525; text-align: center;">
-    Votre nouveau lien d&apos;accès
+    Code d'accès à votre devis
   </h1>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-    Voici un nouveau lien sécurisé pour consulter le devis
-    <strong>${escape(quoteNumber)}</strong>${co}.
+    Voici votre code d'accès sécurisé pour consulter le devis
+    <strong>${escape(quoteNumber)}</strong>${co}&nbsp;:
   </p>
-  <div style="text-align: center; margin: 0 0 24px;">
-    <a href="${escape(link)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
-      Voir mon devis
-    </a>
+  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 28px 20px; margin: 0 0 16px; text-align: center;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #B89456; font-weight: 600; margin-bottom: 12px;">
+      Votre code
+    </div>
+    <div style="font-family: -apple-system, monospace; font-size: 40px; font-weight: 700; letter-spacing: 0.18em; color: #252525;">
+      ${escape(code)}
+    </div>
   </div>
-  <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
-    Ce lien est à usage unique et reste valide pendant 24 h.
+  <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0 0 8px;">
+    Tapez ce code à 6 chiffres sur la page d'accès à votre devis. Il reste valide 24 h.
   </p>
+  ${linkBlock}
 </div>`;
 }
 

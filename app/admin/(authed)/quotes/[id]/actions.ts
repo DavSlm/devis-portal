@@ -189,10 +189,12 @@ export async function regenerateClientLink(formData: FormData): Promise<void> {
     });
   if (linkErr) throw new Error(`generateLink: ${linkErr.message}`);
   const magicLink = linkData?.properties?.action_link;
+  const emailOtp = linkData?.properties?.email_otp;
+  const accessUrl = `${appUrl}/quotes/${quote.id}/access`;
 
   let emailSent = false;
   let emailError: string | undefined;
-  if (process.env.RESEND_API_KEY && magicLink) {
+  if (process.env.RESEND_API_KEY && emailOtp) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -204,7 +206,9 @@ export async function regenerateClientLink(formData: FormData): Promise<void> {
           companyName: quote.company_name ?? '',
           quoteNumber: quote.quote_number,
           totalHt: quote.subtotal_ht,
-          link: magicLink,
+          code: emailOtp,
+          accessUrl,
+          link: magicLink ?? '',
         }),
       });
       emailSent = true;
@@ -322,10 +326,12 @@ async function createAndSendQuoteImpl(input: CreateQuoteInput): Promise<CreateQu
   }
 
   const magicLink = linkData?.properties?.action_link;
+  const emailOtp = linkData?.properties?.email_otp;
+  const accessUrl = `${appUrl}/quotes/${quote.id}/access`;
 
   let emailSent = false;
   let emailError: string | undefined;
-  if (process.env.RESEND_API_KEY && magicLink) {
+  if (process.env.RESEND_API_KEY && emailOtp) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -337,7 +343,9 @@ async function createAndSendQuoteImpl(input: CreateQuoteInput): Promise<CreateQu
           companyName: request.company_name ?? '',
           quoteNumber: quote.quote_number,
           totalHt: subtotalHt,
-          link: magicLink,
+          code: emailOtp,
+          accessUrl,
+          link: magicLink ?? '',
         }),
       });
       emailSent = true;
@@ -360,6 +368,8 @@ interface ClientEmailArgs {
   companyName: string;
   quoteNumber: string;
   totalHt: number;
+  code: string;
+  accessUrl: string;
   link: string;
 }
 
@@ -368,10 +378,19 @@ function renderClientEmail({
   companyName,
   quoteNumber,
   totalHt,
+  code,
+  accessUrl,
   link,
 }: ClientEmailArgs): string {
   const greet = customerName ? `Bonjour ${escapeHtml(customerName)},` : 'Bonjour,';
   const co = companyName ? ` (${escapeHtml(companyName)})` : '';
+  const linkBlock = link
+    ? `<div style="text-align: center; margin: 0 0 16px;">
+        <a href="${escapeHtml(link)}" style="font-size: 12px; color: #B89456; text-decoration: underline;">
+          Ou cliquez ici pour accéder directement à votre devis
+        </a>
+      </div>`
+    : '';
   return `
 <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
   <div style="text-align: center; margin-bottom: 24px;">
@@ -383,13 +402,13 @@ function renderClientEmail({
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
     Nous avons préparé votre devis personnalisé${co}.
-    Vous pouvez le consulter, télécharger le PDF et l&apos;accepter en ligne&nbsp;:
+    Vous pouvez le consulter, télécharger le PDF et l&apos;accepter en ligne.
   </p>
-  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 20px; margin: 0 0 24px; text-align: center;">
+  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 20px; margin: 0 0 20px; text-align: center;">
     <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
       Référence
     </div>
-    <div style="font-size: 16px; font-weight: 600; color: #252525; margin-bottom: 12px;">
+    <div style="font-size: 16px; font-weight: 600; color: #252525; margin-bottom: 14px;">
       ${escapeHtml(quoteNumber)}
     </div>
     <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
@@ -399,14 +418,24 @@ function renderClientEmail({
       ${formatEuro(totalHt)}
     </div>
   </div>
-  <div style="text-align: center; margin: 0 0 24px;">
-    <a href="${escapeHtml(link)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
+  <div style="background: #fff; border: 1px solid #EFE7D2; border-radius: 8px; padding: 24px 20px; margin: 0 0 20px; text-align: center;">
+    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #B89456; font-weight: 600; margin-bottom: 12px;">
+      Votre code d'accès
+    </div>
+    <div style="font-family: -apple-system, monospace; font-size: 40px; font-weight: 700; letter-spacing: 0.18em; color: #252525;">
+      ${escapeHtml(code)}
+    </div>
+  </div>
+  <div style="text-align: center; margin: 0 0 16px;">
+    <a href="${escapeHtml(accessUrl)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
       Voir mon devis
     </a>
   </div>
-  <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
-    Ce lien sécurisé expire dans 24 h. Vous pouvez en redemander un à tout moment.
+  <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0 0 8px;">
+    Tapez ce code à 6 chiffres sur la page d'accès, ou cliquez sur le bouton ci-dessus.
+    Le code reste valide 24 h.
   </p>
+  ${linkBlock}
 </div>`;
 }
 

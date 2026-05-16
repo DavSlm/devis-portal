@@ -1,16 +1,87 @@
-import { requestAccessLink } from '../actions';
+'use client';
+
+import { use, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { requestAccessOtp } from '../actions';
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sent?: string; error?: string }>;
 }
 
-export default async function QuoteAccessPage({ params, searchParams }: PageProps) {
-  const { id } = await params;
-  const { sent, error } = await searchParams;
+type Step = 'email' | 'code';
+
+export default function QuoteAccessPage({ params }: PageProps) {
+  const { id } = use(params);
+  const router = useRouter();
+
+  const [step, setStep] = useState<Step>('email');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [requestPending, startRequest] = useTransition();
+  const [verifyPending, startVerify] = useTransition();
+  const [resentJustNow, setResentJustNow] = useState(false);
+
+  const sendCode = (target: string) => {
+    setErrorMsg(null);
+    startRequest(async () => {
+      await requestAccessOtp({ quoteId: id, email: target });
+      setStep('code');
+    });
+  };
+
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendCode(email.trim().toLowerCase());
+  };
+
+  const handleCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    const trimmedCode = code.replace(/\s/g, '');
+    if (trimmedCode.length !== 6) {
+      setErrorMsg('Le code doit faire 6 chiffres.');
+      return;
+    }
+    startVerify(async () => {
+      const supabase = createClient();
+      const { error } = await supabase.auth.verifyOtp({
+        email: email.trim().toLowerCase(),
+        token: trimmedCode,
+        type: 'email',
+      });
+      if (error) {
+        setErrorMsg(
+          error.message.toLowerCase().includes('expired')
+            ? 'Code expiré. Demandez-en un nouveau.'
+            : error.message.toLowerCase().includes('invalid')
+              ? 'Code incorrect. Vérifiez votre email et réessayez.'
+              : `Erreur : ${error.message}`,
+        );
+        return;
+      }
+      router.replace(`/quotes/${id}`);
+    });
+  };
+
+  const handleResend = () => {
+    setCode('');
+    setResentJustNow(false);
+    sendCode(email.trim().toLowerCase());
+    setResentJustNow(true);
+    setTimeout(() => setResentJustNow(false), 4000);
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-white px-4 py-12">
+    <div
+      className="min-h-screen flex items-center justify-center bg-white px-4 py-12"
+      style={{
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+        paddingBottom: 'max(3rem, env(safe-area-inset-bottom))',
+      }}
+    >
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -19,31 +90,21 @@ export default async function QuoteAccessPage({ params, searchParams }: PageProp
             alt="Oshibori Concept"
             className="h-12 w-auto mx-auto"
           />
-          <h1 className="text-xl font-semibold text-ink">Accéder à votre devis</h1>
+          <h1 className="text-xl font-semibold text-ink">
+            {step === 'email' ? 'Accéder à votre devis' : 'Entrez votre code'}
+          </h1>
           <p className="text-sm text-ink-soft">
-            Entrez l&apos;email qui a reçu le devis pour recevoir un nouveau lien
-            d&apos;accès sécurisé.
+            {step === 'email'
+              ? "Entrez l'email qui a reçu le devis pour recevoir un code d'accès à 6 chiffres."
+              : `Code envoyé à `}
+            {step === 'code' && (
+              <code className="text-ink font-medium">{email}</code>
+            )}
           </p>
         </div>
 
-        {sent === '1' ? (
-          <div
-            className="rounded-[var(--qw-card-radius)] border p-5 text-sm text-center"
-            style={{
-              background: 'var(--qw-cream)',
-              borderColor: 'var(--qw-cream-strong)',
-              color: 'var(--qw-gold-dark)',
-            }}
-          >
-            <strong className="block mb-1">Vérifiez votre boîte mail</strong>
-            <span className="text-ink-soft">
-              Si l&apos;email correspond à ce devis, un lien sécurisé vient d&apos;y
-              être envoyé.
-            </span>
-          </div>
-        ) : (
-          <form action={requestAccessLink} className="space-y-4">
-            <input type="hidden" name="id" value={id} />
+        {step === 'email' && (
+          <form onSubmit={handleEmailSubmit} className="space-y-4">
             <label className="block">
               <span className="qw-label">Email</span>
               <input
@@ -54,23 +115,88 @@ export default async function QuoteAccessPage({ params, searchParams }: PageProp
                 autoComplete="email"
                 className="qw-input"
                 placeholder="vous@entreprise.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </label>
-            {error && (
-              <p className="text-sm text-[var(--qw-error)]">
-                {error === 'invalid'
-                  ? 'Email requis.'
-                  : `Erreur : ${decodeURIComponent(error)}`}
-              </p>
-            )}
+
             <button
               type="submit"
-              className="w-full py-3 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+              disabled={requestPending || !email}
+              className="w-full py-3 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
             >
-              Recevoir mon lien d&apos;accès
+              {requestPending ? 'Envoi…' : "Recevoir mon code d'accès"}
             </button>
+
             <p className="text-xs text-center text-ink-soft">
-              Le lien précédent a peut-être expiré. Demandez-en un nouveau ici.
+              Si l&apos;email correspond à ce devis, vous recevrez un code à 6
+              chiffres dans quelques secondes.
+            </p>
+          </form>
+        )}
+
+        {step === 'code' && (
+          <form onSubmit={handleCodeSubmit} className="space-y-4">
+            <label className="block">
+              <span className="qw-label">Code à 6 chiffres</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                autoFocus
+                className="qw-input text-center text-2xl font-mono tracking-[0.4em]"
+                placeholder="••••••"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              />
+            </label>
+
+            {errorMsg && (
+              <p className="text-sm text-[var(--qw-error)] text-center">
+                {errorMsg}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={verifyPending || code.length !== 6}
+              className="w-full py-3 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+            >
+              {verifyPending ? 'Vérification…' : 'Accéder à mon devis'}
+            </button>
+
+            <div className="flex items-center justify-between text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('email');
+                  setCode('');
+                  setErrorMsg(null);
+                }}
+                className="text-ink-soft hover:text-ink underline"
+              >
+                ← Changer d&apos;email
+              </button>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={requestPending}
+                className="text-gold-dark hover:text-ink underline disabled:opacity-60"
+              >
+                {requestPending
+                  ? 'Envoi…'
+                  : resentJustNow
+                    ? '✓ Code renvoyé'
+                    : 'Renvoyer le code'}
+              </button>
+            </div>
+
+            <p className="text-[11px] text-center text-ink-soft">
+              Vous pouvez aussi cliquer sur le lien direct dans l&apos;email
+              reçu — les deux fonctionnent.
             </p>
           </form>
         )}
