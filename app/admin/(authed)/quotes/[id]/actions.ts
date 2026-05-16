@@ -97,7 +97,7 @@ export async function regenerateClientLink(formData: FormData): Promise<void> {
     await supabase.auth.admin.generateLink({
       type: 'magiclink',
       email: quote.email,
-      options: { redirectTo: `${appUrl}/auth/callback?next=/quotes/${quote.id}` },
+      options: { redirectTo: `${appUrl}/quotes/${quote.id}/auth` },
     });
   if (linkErr) throw new Error(`generateLink: ${linkErr.message}`);
   const magicLink = linkData?.properties?.action_link;
@@ -224,7 +224,8 @@ async function createAndSendQuoteImpl(input: CreateQuoteInput): Promise<CreateQu
     type: 'magiclink',
     email: request.email,
     options: {
-      redirectTo: `${appUrl}/auth/callback?next=/quotes/${quote.id}`,
+      // Path-based redirect — survives Supabase Auth's query-param handling.
+      redirectTo: `${appUrl}/quotes/${quote.id}/auth`,
     },
   });
   if (linkErr) {

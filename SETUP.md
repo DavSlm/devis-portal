@@ -152,9 +152,13 @@ Une fois Sprint 2 déployé, deux configs Supabase à faire avant de pouvoir te 
 1. Va sur ton projet Supabase → **Authentication → URL Configuration**
 2. Dans **Site URL**, mets : `https://devis-portal-vpmx.vercel.app`
 3. Dans **Redirect URLs**, ajoute (un par ligne) :
-   - `https://devis-portal-vpmx.vercel.app/auth/callback`
-   - `http://localhost:3000/auth/callback` (pour le dev en local)
+   - `https://devis-portal-vpmx.vercel.app/**` (couvre toutes les routes : `/auth/callback`, `/quotes/*/auth`, etc.)
+   - `http://localhost:3000/**` (pour le dev en local)
 4. Sauvegarde
+
+Pourquoi un wildcard `/**` ? On a deux endpoints d'auth :
+- `/auth/callback` pour la connexion admin (`/admin`)
+- `/quotes/[id]/auth` pour les magic links client (encode l'id du devis dans le path pour fiabiliser le redirect)
 
 Sans ça, Supabase refuse les magic links → tu reçois une erreur après avoir cliqué le lien dans ton email.
 

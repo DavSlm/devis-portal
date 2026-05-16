@@ -156,7 +156,8 @@ export async function requestAccessLink(formData: FormData): Promise<void> {
     type: 'magiclink',
     email,
     options: {
-      redirectTo: `${appUrl}/auth/callback?next=/quotes/${id}`,
+      // Path-based redirect — survives Supabase Auth's query-param handling.
+      redirectTo: `${appUrl}/quotes/${id}/auth`,
     },
   });
 
