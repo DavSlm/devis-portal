@@ -5,19 +5,27 @@ import { formatEuro } from '@/lib/pricing';
 import {
   archiveRequest,
   createAndSendQuote,
+  regenerateClientLink,
   updateInternalNotes,
 } from './actions';
+import { LinkPanel } from './LinkPanel';
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sent?: string }>;
+  searchParams: Promise<{
+    sent?: string;
+    emailOk?: string;
+    link?: string;
+    emailError?: string;
+    quote?: string;
+  }>;
 }
 
 export default async function QuoteRequestDetail({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { sent } = await searchParams;
+  const { sent, emailOk, link, emailError, quote: quoteId } = await searchParams;
 
   const supabase = createAdminClient();
 
@@ -64,16 +72,14 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
       </div>
 
       {sent === '1' && (
-        <div
-          className="rounded-[var(--qw-card-radius)] border p-4 text-sm"
-          style={{
-            background: 'rgba(25, 135, 84, 0.08)',
-            borderColor: 'rgba(25, 135, 84, 0.25)',
-            color: 'var(--qw-success)',
-          }}
-        >
-          ✓ Devis créé et envoyé au client par email.
-        </div>
+        <LinkPanel
+          requestId={request.id}
+          quoteId={quoteId}
+          emailOk={emailOk === '1'}
+          emailError={emailError}
+          magicLink={link}
+          clientEmail={request.email}
+        />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,420px)] gap-6">

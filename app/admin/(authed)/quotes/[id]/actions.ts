@@ -49,7 +49,7 @@ export async function createAndSendQuote(formData: FormData): Promise<void> {
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) throw new Error('Prix invalide');
   if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Quantité invalide');
 
-  await createAndSendQuoteImpl({
+  const result = await createAndSendQuoteImpl({
     requestId,
     unitPrice,
     quantity,
@@ -61,10 +61,88 @@ export async function createAndSendQuote(formData: FormData): Promise<void> {
 
   revalidatePath('/admin');
   revalidatePath(`/admin/quotes/${requestId}`);
-  redirect(`/admin/quotes/${requestId}?sent=1`);
+
+  const params = new URLSearchParams({
+    sent: '1',
+    emailOk: result.emailSent ? '1' : '0',
+  });
+  if (result.magicLink) params.set('link', result.magicLink);
+  if (result.emailError) params.set('emailError', result.emailError);
+  if (result.quoteId) params.set('quote', result.quoteId);
+
+  redirect(`/admin/quotes/${requestId}?${params.toString()}`);
 }
 
-async function createAndSendQuoteImpl(input: CreateQuoteInput) {
+/**
+ * Regenerate a fresh magic link for an already-created quote. Used when the
+ * previous one expired or was sent to the wrong channel.
+ */
+export async function regenerateClientLink(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId'));
+  const quoteId = String(formData.get('quoteId'));
+  if (!requestId || !quoteId) throw new Error('Paramètres manquants');
+
+  const supabase = createAdminClient();
+  const { data: quote } = await supabase
+    .from('quotes')
+    .select('id, email, quote_number, subtotal_ht, full_name, company_name')
+    .eq('id', quoteId)
+    .single();
+
+  if (!quote) throw new Error('Devis introuvable');
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ?? 'https://devis-portal-vpmx.vercel.app';
+  const { data: linkData, error: linkErr } =
+    await supabase.auth.admin.generateLink({
+      type: 'magiclink',
+      email: quote.email,
+      options: { redirectTo: `${appUrl}/auth/callback?next=/quotes/${quote.id}` },
+    });
+  if (linkErr) throw new Error(`generateLink: ${linkErr.message}`);
+  const magicLink = linkData?.properties?.action_link;
+
+  let emailSent = false;
+  let emailError: string | undefined;
+  if (process.env.RESEND_API_KEY && magicLink) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: quote.email,
+        subject: `Votre devis ${quote.quote_number} — Oshibori Concept`,
+        html: renderClientEmail({
+          customerName: quote.full_name ?? '',
+          companyName: quote.company_name ?? '',
+          quoteNumber: quote.quote_number,
+          totalHt: quote.subtotal_ht,
+          link: magicLink,
+        }),
+      });
+      emailSent = true;
+    } catch (err) {
+      emailError = (err as Error).message;
+    }
+  }
+
+  const params = new URLSearchParams({
+    sent: '1',
+    emailOk: emailSent ? '1' : '0',
+    quote: quote.id,
+  });
+  if (magicLink) params.set('link', magicLink);
+  if (emailError) params.set('emailError', emailError);
+  redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+}
+
+interface CreateQuoteResult {
+  quoteId: string;
+  magicLink?: string;
+  emailSent: boolean;
+  emailError?: string;
+}
+
+async function createAndSendQuoteImpl(input: CreateQuoteInput): Promise<CreateQuoteResult> {
   const supabase = createAdminClient();
 
   // Load the source request.
@@ -156,6 +234,8 @@ async function createAndSendQuoteImpl(input: CreateQuoteInput) {
 
   const magicLink = linkData?.properties?.action_link;
 
+  let emailSent = false;
+  let emailError: string | undefined;
   if (process.env.RESEND_API_KEY && magicLink) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -171,10 +251,14 @@ async function createAndSendQuoteImpl(input: CreateQuoteInput) {
           link: magicLink,
         }),
       });
+      emailSent = true;
     } catch (err) {
+      emailError = (err as Error).message;
       console.error('Resend send to client failed', err);
     }
   }
+
+  return { quoteId: quote.id, magicLink, emailSent, emailError };
 }
 
 function parseIntOrNull(s: string): number | null {
