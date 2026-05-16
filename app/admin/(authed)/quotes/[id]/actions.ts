@@ -5,6 +5,48 @@ import { redirect } from 'next/navigation';
 import { Resend } from 'resend';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
+import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
+
+// =====================================================
+// Sprint 4 — Odoo-based flow
+// =====================================================
+
+/**
+ * Pull a sale.order from Odoo, create/update our quotes row, send the
+ * magic link to the client. Triggered from the admin UI when David pastes
+ * an Odoo order number on a quote_request.
+ */
+export async function syncFromOdoo(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  const odooOrderName = String(formData.get('odooOrderName') ?? '').trim();
+
+  if (!requestId) throw new Error('requestId manquant');
+  if (!odooOrderName) throw new Error("N° Odoo manquant (ex. S06736)");
+
+  let result;
+  try {
+    result = await syncOdooOrderToQuote({ requestId, odooOrderName });
+  } catch (err) {
+    const params = new URLSearchParams({
+      odooError: (err as Error).message,
+    });
+    redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+  }
+
+  revalidatePath('/admin');
+  revalidatePath(`/admin/quotes/${requestId}`);
+
+  const params = new URLSearchParams({
+    sent: '1',
+    emailOk: result.emailSent ? '1' : '0',
+  });
+  if (result.magicLink) params.set('link', result.magicLink);
+  if (result.emailError) params.set('emailError', result.emailError);
+  if (result.quoteId) params.set('quote', result.quoteId);
+  params.set('odooName', result.quoteNumber);
+
+  redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+}
 
 interface CreateQuoteInput {
   requestId: string;

@@ -4,8 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import {
   archiveRequest,
-  createAndSendQuote,
   regenerateClientLink,
+  syncFromOdoo,
   updateInternalNotes,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
@@ -20,12 +20,15 @@ interface PageProps {
     link?: string;
     emailError?: string;
     quote?: string;
+    odooError?: string;
+    odooName?: string;
   }>;
 }
 
 export default async function QuoteRequestDetail({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { sent, emailOk, link, emailError, quote: quoteId } = await searchParams;
+  const { sent, emailOk, link, emailError, quote: quoteId, odooError } =
+    await searchParams;
 
   const supabase = createAdminClient();
 
@@ -39,8 +42,6 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
   ]);
 
   if (error || !request) notFound();
-
-  const isProductionReady = !!(request.quantity && request.estimated_unit_price);
 
   return (
     <div className="space-y-6">
@@ -70,6 +71,20 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
           </button>
         </form>
       </div>
+
+      {odooError && (
+        <div
+          className="rounded-[var(--qw-card-radius)] border p-4 text-sm"
+          style={{
+            background: 'rgba(239, 68, 68, 0.08)',
+            borderColor: 'rgba(239, 68, 68, 0.25)',
+            color: 'var(--qw-error)',
+          }}
+        >
+          <strong className="block mb-1">Erreur Odoo</strong>
+          <span>{decodeURIComponent(odooError)}</span>
+        </div>
+      )}
 
       {sent === '1' && (
         <LinkPanel
@@ -246,111 +261,46 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
           )}
         </div>
 
-        {/* Right column — quote creation form */}
+        {/* Right column — Odoo link form */}
         <aside className="lg:sticky lg:top-6 h-fit space-y-6">
-          <Card title="Créer le devis final">
-            {!isProductionReady && (
-              <p
-                className="text-xs mb-4 p-3 rounded"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: 'var(--qw-error)',
-                }}
-              >
-                Quantité ou prix estimé manquant. Vérifiez la demande avant d&apos;émettre
-                un devis.
-              </p>
-            )}
-            <form action={createAndSendQuote} className="space-y-3">
+          <Card title="Lier au devis Odoo">
+            <p className="text-xs text-ink-soft mb-4">
+              Crée d&apos;abord le sale.order dans Odoo (manuellement ou via ton
+              automatisation Python), puis colle son numéro ici. Tous les chiffres —
+              prix, transport, TVA selon position fiscale, PDF — viennent d&apos;Odoo.
+            </p>
+            <form action={syncFromOdoo} className="space-y-3">
               <input type="hidden" name="requestId" value={request.id} />
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="qw-label">Prix unitaire HT</span>
-                  <input
-                    type="number"
-                    name="unitPrice"
-                    step="0.01"
-                    min="0"
-                    required
-                    className="qw-input"
-                    defaultValue={request.estimated_unit_price ?? ''}
-                  />
-                </label>
-                <label className="block">
-                  <span className="qw-label">Quantité</span>
-                  <input
-                    type="number"
-                    name="quantity"
-                    step="1"
-                    min="1"
-                    required
-                    className="qw-input"
-                    defaultValue={request.quantity ?? ''}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="qw-label">TVA %</span>
-                  <input
-                    type="number"
-                    name="vatRate"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    className="qw-input"
-                    defaultValue="20"
-                  />
-                </label>
-                <label className="block">
-                  <span className="qw-label">Délai jours</span>
-                  <input
-                    type="number"
-                    name="deliveryDelayDays"
-                    step="1"
-                    min="0"
-                    className="qw-input"
-                    placeholder="20"
-                  />
-                </label>
-              </div>
-
               <label className="block">
-                <span className="qw-label">Validité (jours)</span>
+                <span className="qw-label">N° de commande Odoo</span>
                 <input
-                  type="number"
-                  name="expiresInDays"
-                  step="1"
-                  min="1"
-                  className="qw-input"
-                  defaultValue="30"
-                />
-              </label>
-
-              <label className="block">
-                <span className="qw-label">Conditions / remarques</span>
-                <textarea
-                  name="conditions"
-                  rows={3}
-                  className="qw-input min-h-20"
-                  placeholder="Conditions commerciales, modalités de paiement, transport…"
+                  type="text"
+                  name="odooOrderName"
+                  required
+                  className="qw-input font-mono"
+                  placeholder="ex. S06736"
+                  autoComplete="off"
                 />
               </label>
 
               <button
                 type="submit"
-                disabled={!isProductionReady}
-                className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
               >
-                Créer le devis et envoyer au client
+                Récupérer depuis Odoo et envoyer au client
               </button>
               <p className="text-[11px] text-ink-soft text-center">
-                Le client recevra un email avec un lien magique vers son devis.
+                Le client recevra un email avec un lien sécurisé vers son devis.
               </p>
             </form>
           </Card>
+
+          <p className="text-[11px] text-ink-soft px-1">
+            Tip : ton automatisation Python peut aussi appeler{' '}
+            <code className="font-mono">POST /api/odoo/sync</code> pour déclencher
+            ce flux sans passer par cette UI.
+          </p>
         </aside>
       </div>
     </div>

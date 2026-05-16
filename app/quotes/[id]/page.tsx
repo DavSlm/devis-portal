@@ -21,6 +21,34 @@ interface QuoteConfig {
   file_url?: string | null;
 }
 
+interface OdooLineSnapshot {
+  id: number;
+  name: string;
+  product_id: [number, string] | false;
+  quantity: number;
+  price_unit: number;
+  price_subtotal: number;
+  price_total: number;
+  is_delivery: boolean;
+  display_type: string | false;
+}
+
+interface OdooSnapshot {
+  order?: {
+    name: string;
+    state: string;
+    amount_untaxed: number;
+    amount_tax: number;
+    amount_total: number;
+    fiscal_position_id?: [number, string] | false;
+    payment_term_id?: [number, string] | false;
+    currency_id?: [number, string] | false;
+    validity_date?: string | false;
+  };
+  productLines?: OdooLineSnapshot[];
+  deliveryLine?: OdooLineSnapshot | null;
+}
+
 interface QuoteRow {
   id: string;
   quote_number: string;
@@ -40,6 +68,9 @@ interface QuoteRow {
   sent_at: string | null;
   expires_at: string | null;
   status: string;
+  odoo_sale_order_id: number | null;
+  odoo_order_name: string | null;
+  odoo_snapshot: OdooSnapshot | null;
 }
 
 const STATUS_META: Record<string, { label: string; tone: string; bg: string }> = {
@@ -220,20 +251,61 @@ export default async function ClientQuotePage({ params }: PageProps) {
           </div>
         </Card>
 
-        {/* Pricing breakdown */}
+        {/* Pricing breakdown — Odoo-driven when available */}
         <Card title="Détail du prix">
           <dl className="space-y-2 text-sm">
-            <Row
-              label={`Quantité × prix unitaire`}
-              value={`${quote.quantity.toLocaleString('fr-FR')} × ${formatEuro(quote.unit_price)}`}
-            />
+            {quote.odoo_snapshot?.productLines &&
+            quote.odoo_snapshot.productLines.length > 0 ? (
+              <>
+                {quote.odoo_snapshot.productLines.map((line) => (
+                  <Row
+                    key={line.id}
+                    label={
+                      <span className="block">
+                        <span className="block">
+                          {line.quantity.toLocaleString('fr-FR')} × {formatEuro(line.price_unit)}
+                        </span>
+                        <span className="block text-[11px] text-ink-soft">
+                          {truncate(line.name, 90)}
+                        </span>
+                      </span>
+                    }
+                    value={formatEuro(line.price_subtotal)}
+                  />
+                ))}
+                {quote.odoo_snapshot.deliveryLine && (
+                  <Row
+                    label={
+                      <span className="block">
+                        <span className="block">Transport</span>
+                        <span className="block text-[11px] text-ink-soft">
+                          {truncate(quote.odoo_snapshot.deliveryLine.name, 80)}
+                        </span>
+                      </span>
+                    }
+                    value={formatEuro(quote.odoo_snapshot.deliveryLine.price_subtotal)}
+                  />
+                )}
+              </>
+            ) : (
+              <Row
+                label={`Quantité × prix unitaire`}
+                value={`${quote.quantity.toLocaleString('fr-FR')} × ${formatEuro(quote.unit_price)}`}
+              />
+            )}
             <Row
               label="Sous-total HT"
               value={<strong>{formatEuro(quote.subtotal_ht)}</strong>}
             />
-            {quote.vat_amount != null && quote.vat_rate != null && (
+            {quote.vat_amount != null && (
               <Row
-                label={`TVA ${quote.vat_rate}%`}
+                label={
+                  quote.odoo_snapshot?.order?.fiscal_position_id
+                    ? `TVA — ${quote.odoo_snapshot.order.fiscal_position_id[1]}`
+                    : quote.vat_rate != null
+                      ? `TVA ${quote.vat_rate}%`
+                      : 'TVA'
+                }
                 value={formatEuro(quote.vat_amount)}
               />
             )}
@@ -249,10 +321,30 @@ export default async function ClientQuotePage({ params }: PageProps) {
               />
             )}
           </dl>
-          <p className="text-xs italic text-ink-soft mt-4">
-            Prix HT, EXW France · transport en sus.
+          {quote.odoo_snapshot?.order?.payment_term_id && (
+            <p className="text-xs text-ink-soft mt-4">
+              Conditions de paiement&nbsp;:{' '}
+              <strong className="text-ink">
+                {quote.odoo_snapshot.order.payment_term_id[1]}
+              </strong>
+            </p>
+          )}
+          <p className="text-xs italic text-ink-soft mt-2">
+            Prix HT.
             {quote.delivery_delay_days && ` Délai indicatif : ${quote.delivery_delay_days} jours ouvrés.`}
           </p>
+
+          {quote.odoo_sale_order_id && (
+            <a
+              href={`/api/quotes/${quote.id}/pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-medium border border-[var(--qw-border-soft)] hover:border-[var(--qw-gold)] hover:bg-[var(--qw-cream)] transition-colors"
+            >
+              <span aria-hidden="true">⇩</span>
+              Télécharger le devis (PDF)
+            </a>
+          )}
         </Card>
 
         {/* Conditions */}
@@ -314,7 +406,7 @@ function Row({
   value,
   highlight,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: React.ReactNode;
   highlight?: boolean;
 }) {
@@ -377,6 +469,11 @@ function formatDate(iso: string | null): string {
     month: 'long',
     year: 'numeric',
   });
+}
+
+function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).trimEnd() + '…';
 }
 
 function pickProductImage(quote: QuoteRow): string | null {
