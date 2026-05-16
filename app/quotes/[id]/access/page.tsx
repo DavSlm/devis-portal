@@ -40,8 +40,8 @@ export default function QuoteAccessPage({ params }: PageProps) {
     e.preventDefault();
     setErrorMsg(null);
     const trimmedCode = code.replace(/\s/g, '');
-    if (trimmedCode.length !== 6) {
-      setErrorMsg('Le code doit faire 6 chiffres.');
+    if (trimmedCode.length < 6) {
+      setErrorMsg('Code trop court — vérifiez votre email.');
       return;
     }
     startVerify(async () => {
@@ -95,7 +95,7 @@ export default function QuoteAccessPage({ params }: PageProps) {
           </h1>
           <p className="text-sm text-ink-soft">
             {step === 'email'
-              ? "Entrez l'email qui a reçu le devis pour recevoir un code d'accès à 6 chiffres."
+              ? "Entrez l'email qui a reçu le devis pour recevoir un code d'accès."
               : `Code envoyé à `}
             {step === 'code' && (
               <code className="text-ink font-medium">{email}</code>
@@ -129,8 +129,8 @@ export default function QuoteAccessPage({ params }: PageProps) {
             </button>
 
             <p className="text-xs text-center text-ink-soft">
-              Si l&apos;email correspond à ce devis, vous recevrez un code à 6
-              chiffres dans quelques secondes.
+              Si l&apos;email correspond à ce devis, vous recevrez votre code
+              d&apos;accès dans quelques secondes.
             </p>
           </form>
         )}
@@ -138,19 +138,19 @@ export default function QuoteAccessPage({ params }: PageProps) {
         {step === 'code' && (
           <form onSubmit={handleCodeSubmit} className="space-y-4">
             <label className="block">
-              <span className="qw-label">Code à 6 chiffres</span>
+              <span className="qw-label">Code reçu par email</span>
               <input
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                maxLength={6}
+                pattern="[0-9]{6,10}"
+                maxLength={10}
                 required
                 autoFocus
                 className="qw-input text-center text-2xl font-mono tracking-[0.4em]"
-                placeholder="••••••"
+                placeholder="••••••••"
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 10))}
               />
             </label>
 
@@ -162,7 +162,7 @@ export default function QuoteAccessPage({ params }: PageProps) {
 
             <button
               type="submit"
-              disabled={verifyPending || code.length !== 6}
+              disabled={verifyPending || code.length < 6}
               className="w-full py-3 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
             >
               {verifyPending ? 'Vérification…' : 'Accéder à mon devis'}

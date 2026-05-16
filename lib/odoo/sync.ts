@@ -286,7 +286,7 @@ function renderClientEmail({
     </a>
   </div>
   <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0 0 8px;">
-    Tapez ce code à 6 chiffres sur la page d'accès, ou cliquez sur le bouton ci-dessus.
+    Tapez ce code sur la page d'accès, ou cliquez sur le bouton ci-dessus.
     Le code reste valide 24 h.
   </p>
   ${linkBlock}
