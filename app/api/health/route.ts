@@ -9,6 +9,11 @@ export async function GET() {
     supabase_anon: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     supabase_service: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     resend: !!process.env.RESEND_API_KEY,
+    odoo_url: !!process.env.ODOO_URL,
+    odoo_db: !!process.env.ODOO_DB,
+    odoo_user: !!process.env.ODOO_USER,
+    odoo_password: !!process.env.ODOO_PASSWORD,
+    odoo_sync_token: !!process.env.ODOO_SYNC_TOKEN,
   };
 
   let supabase: { ok: boolean; counts?: Record<string, number | null>; error?: string };
