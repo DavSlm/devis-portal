@@ -4,7 +4,15 @@
 // Falls back to the project owner's email if unset.
 // =====================================================
 
-const FALLBACK = ['dasalama@icloud.com'];
+// Hardcoded fallback used when ADMIN_EMAILS env var isn't set on the
+// deployment. For long-term management, prefer setting ADMIN_EMAILS
+// in Vercel (one comma-separated list) so the team can be edited
+// without a redeploy.
+const FALLBACK = [
+  'dasalama@icloud.com',
+  'david@oshibori-concept.com',
+  'marketing@oshibori-concept.com',
+];
 
 function getAllowlist(): string[] {
   const raw = process.env.ADMIN_EMAILS;

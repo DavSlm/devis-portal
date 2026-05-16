@@ -1,9 +1,41 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { Suspense, useState, useTransition } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
-export default function AdminLoginPage() {
+function decodeUrlError(raw: string | null): { title: string; body: string } | null {
+  if (!raw) return null;
+  switch (raw) {
+    case 'not_authorized':
+      return {
+        title: 'Votre email n’est pas autorisé',
+        body:
+          'Cet email ne fait pas partie de la liste des administrateurs autorisés à accéder au dashboard. ' +
+          'Contactez l’administrateur principal pour être ajouté.',
+      };
+    case 'missing_code':
+      return {
+        title: 'Lien de connexion invalide',
+        body: 'Le lien semble incomplet ou expiré. Réessayez la connexion.',
+      };
+    case 'unauthorized':
+      return {
+        title: 'Accès refusé',
+        body: 'Votre session n’a pas pu être vérifiée.',
+      };
+    default:
+      return {
+        title: 'Erreur de connexion',
+        body: decodeURIComponent(raw),
+      };
+  }
+}
+
+function AdminLoginContent() {
+  const searchParams = useSearchParams();
+  const urlError = decodeUrlError(searchParams.get('error'));
+
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<'idle' | 'sent' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -63,6 +95,24 @@ export default function AdminLoginPage() {
           />
           <h1 className="text-xl font-semibold text-ink">Espace admin</h1>
         </div>
+
+        {urlError && (
+          <div
+            className="rounded-[var(--qw-card-radius)] border p-4 text-sm"
+            style={{
+              background: 'rgba(239, 68, 68, 0.08)',
+              borderColor: 'rgba(239, 68, 68, 0.25)',
+            }}
+          >
+            <strong
+              className="block mb-1"
+              style={{ color: 'var(--qw-error)' }}
+            >
+              {urlError.title}
+            </strong>
+            <span className="text-ink-soft">{urlError.body}</span>
+          </div>
+        )}
 
         {status === 'sent' ? (
           <div
@@ -137,6 +187,15 @@ export default function AdminLoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  // useSearchParams requires a Suspense boundary at the page level.
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <AdminLoginContent />
+    </Suspense>
   );
 }
 
