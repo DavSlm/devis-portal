@@ -6,6 +6,7 @@ import { Resend } from 'resend';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
+import { createOdooDraftFromRequest } from '@/lib/odoo/createDraft';
 
 // =====================================================
 // Sprint 4 — Odoo-based flow
@@ -107,6 +108,51 @@ export async function createAndSendQuote(formData: FormData): Promise<void> {
   const params = new URLSearchParams({
     sent: '1',
     emailOk: result.emailSent ? '1' : '0',
+  });
+  if (result.magicLink) params.set('link', result.magicLink);
+  if (result.emailError) params.set('emailError', result.emailError);
+  if (result.quoteId) params.set('quote', result.quoteId);
+
+  redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+}
+
+/**
+ * Build a fresh sale.order draft in Odoo from the quote_request data
+ * (creating the partner if needed), then immediately sync it back to our
+ * DB and send the magic link to the client.
+ *
+ *   form fields: requestId, odooProductId, quantity
+ */
+export async function generateOdooDraft(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  const productId = parseInt(String(formData.get('odooProductId') ?? '0'), 10);
+  const quantity = parseInt(String(formData.get('quantity') ?? '0'), 10);
+
+  if (!requestId) throw new Error('requestId manquant');
+  if (!quantity || quantity <= 0) throw new Error('Quantité invalide');
+
+  let result;
+  try {
+    result = await createOdooDraftFromRequest({
+      requestId,
+      productId: productId > 0 ? productId : undefined, // optionnel : si vide, auto-résolution depuis le wizard
+      quantity,
+    });
+  } catch (err) {
+    const params = new URLSearchParams({
+      odooError: (err as Error).message,
+    });
+    redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+  }
+
+  revalidatePath('/admin');
+  revalidatePath(`/admin/quotes/${requestId}`);
+
+  const params = new URLSearchParams({
+    sent: '1',
+    emailOk: result.emailSent ? '1' : '0',
+    odooName: result.quoteNumber,
+    odooCreated: '1',
   });
   if (result.magicLink) params.set('link', result.magicLink);
   if (result.emailError) params.set('emailError', result.emailError);

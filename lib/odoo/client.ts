@@ -229,6 +229,157 @@ export function pdfUrl(saleOrderId: number, token: string): string {
 }
 
 // =====================================================
+// Partners (res.partner)
+// =====================================================
+
+export interface OdooPartner {
+  id: number;
+  name: string;
+  email: string | false;
+  phone: string | false;
+}
+
+export async function findPartnerByEmail(email: string): Promise<OdooPartner | null> {
+  if (!email) return null;
+  const rows = await executeKw<OdooPartner[]>(
+    'res.partner',
+    'search_read',
+    [[['email', '=ilike', email]]],
+    { fields: ['id', 'name', 'email', 'phone'], limit: 1 },
+  );
+  return rows[0] ?? null;
+}
+
+export interface CreatePartnerInput {
+  name: string;
+  email: string;
+  phone?: string | null;
+  street?: string | null;
+  street2?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  countryName?: string | null;
+  vat?: string | null;
+  isCompany?: boolean;
+}
+
+export async function findCountryIdByName(name: string): Promise<number | null> {
+  if (!name) return null;
+  const rows = await executeKw<Array<{ id: number; name: string }>>(
+    'res.country',
+    'search_read',
+    [['|', ['name', '=ilike', name], ['code', '=', name.toUpperCase()]]],
+    { fields: ['id', 'name'], limit: 1 },
+  );
+  return rows[0]?.id ?? null;
+}
+
+export async function createPartner(input: CreatePartnerInput): Promise<number> {
+  const data: Record<string, unknown> = {
+    name: input.name,
+    email: input.email,
+    is_company: !!input.isCompany,
+  };
+  if (input.phone) data.phone = input.phone;
+  if (input.street) data.street = input.street;
+  if (input.street2) data.street2 = input.street2;
+  if (input.zip) data.zip = input.zip;
+  if (input.city) data.city = input.city;
+  if (input.vat) data.vat = input.vat;
+  if (input.countryName) {
+    const countryId = await findCountryIdByName(input.countryName);
+    if (countryId) data.country_id = countryId;
+  }
+  return executeKw<number>('res.partner', 'create', [data]);
+}
+
+// =====================================================
+// Products (product.product)
+// =====================================================
+
+export interface OdooProductLite {
+  id: number;
+  name: string;
+  default_code: string | false;
+}
+
+/**
+ * List Oshibori-family sale products, optionally pre-filtered by a hint
+ * substring matched against name OR default_code.
+ */
+export async function listOshiboriProducts(hint?: string): Promise<OdooProductLite[]> {
+  const baseDomain: unknown[] = [['sale_ok', '=', true]];
+  // Filter to Oshibori-related products only — broad OR
+  baseDomain.push('|');
+  baseDomain.push('|');
+  baseDomain.push(['name', 'ilike', 'oshibori']);
+  baseDomain.push(['default_code', '=ilike', 'PE%']);
+  baseDomain.push(['default_code', '=ilike', 'OPP%']);
+
+  if (hint) {
+    baseDomain.unshift('&');
+    baseDomain.push('|');
+    baseDomain.push(['name', 'ilike', hint]);
+    baseDomain.push(['default_code', 'ilike', hint]);
+  }
+
+  return executeKw<OdooProductLite[]>(
+    'product.product',
+    'search_read',
+    [baseDomain],
+    {
+      fields: ['id', 'name', 'default_code'],
+      limit: 100,
+      order: 'default_code asc',
+    },
+  );
+}
+
+// =====================================================
+// Sale order creation
+// =====================================================
+
+export interface CreateSaleOrderInput {
+  partnerId: number;
+  lines: Array<{ productId: number; quantity: number; description?: string }>;
+  validityDate?: string; // YYYY-MM-DD
+  clientOrderRef?: string;
+  note?: string;
+  fiscalPositionId?: number;
+  companyId?: number;
+}
+
+export async function createSaleOrder(
+  input: CreateSaleOrderInput,
+): Promise<OdooSaleOrder> {
+  const data: Record<string, unknown> = {
+    partner_id: input.partnerId,
+    state: 'draft',
+  };
+  // (0, 0, {fields}) — Odoo command tuple to create a new line.
+  data.order_line = input.lines.map((l) => [
+    0,
+    0,
+    {
+      product_id: l.productId,
+      product_uom_qty: l.quantity,
+      ...(l.description ? { name: l.description } : {}),
+    },
+  ]);
+  if (input.validityDate) data.validity_date = input.validityDate;
+  if (input.clientOrderRef) data.client_order_ref = input.clientOrderRef;
+  if (input.note) data.note = input.note;
+  if (input.fiscalPositionId) data.fiscal_position_id = input.fiscalPositionId;
+  if (input.companyId) data.company_id = input.companyId;
+
+  const newId = await executeKw<number>('sale.order', 'create', [data]);
+
+  const created = await readSaleOrder(newId);
+  if (!created) throw new Error(`sale.order ${newId} created but not readable`);
+  return created;
+}
+
+// =====================================================
 // High-level orchestrator: fetch sale order + lines + ensure token
 // =====================================================
 

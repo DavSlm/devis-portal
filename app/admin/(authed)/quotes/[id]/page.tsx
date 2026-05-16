@@ -4,11 +4,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import {
   archiveRequest,
+  generateOdooDraft,
   regenerateClientLink,
   syncFromOdoo,
   updateInternalNotes,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
+import { listOshiboriProducts, type OdooProductLite } from '@/lib/odoo/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +44,19 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
   ]);
 
   if (error || !request) notFound();
+
+  // Fetch Odoo products (catalog cached for the request lifetime).
+  // Pre-filter by grammage hint for a more relevant default selection.
+  const grammage = (request.grammage as string | null) ?? '';
+  const hint = grammage.startsWith('15') ? '15' : grammage.startsWith('10') ? '10' : grammage.startsWith('6') ? '6' : '';
+  let odooProducts: OdooProductLite[] = [];
+  let odooProductsError: string | null = null;
+  try {
+    odooProducts = await listOshiboriProducts(hint || undefined);
+  } catch (err) {
+    odooProductsError = (err as Error).message;
+  }
+  const defaultProductId = pickSuggestedProduct(request, odooProducts);
 
   return (
     <div className="space-y-6">
@@ -261,13 +276,86 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
           )}
         </div>
 
-        {/* Right column — Odoo link form */}
+        {/* Right column — Odoo actions */}
         <aside className="lg:sticky lg:top-6 h-fit space-y-6">
-          <Card title="Lier au devis Odoo">
+          <Card title="Générer le devis sur Odoo">
             <p className="text-xs text-ink-soft mb-4">
-              Crée d&apos;abord le sale.order dans Odoo (manuellement ou via ton
-              automatisation Python), puis colle son numéro ici. Tous les chiffres —
-              prix, transport, TVA selon position fiscale, PDF — viennent d&apos;Odoo.
+              Crée un brouillon directement dans Odoo à partir de cette demande.
+              Choisis le produit, ajuste la quantité — on s&apos;occupe du reste
+              (client, position fiscale, transport, TVA).
+            </p>
+            {odooProductsError && (
+              <p
+                className="text-xs mb-3 p-2 rounded"
+                style={{
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: 'var(--qw-error)',
+                }}
+              >
+                Impossible de charger les produits Odoo : {odooProductsError}
+              </p>
+            )}
+            {!odooProductsError && (
+              <form action={generateOdooDraft} className="space-y-3">
+                <input type="hidden" name="requestId" value={request.id} />
+
+                <label className="block">
+                  <span className="qw-label">Produit Odoo</span>
+                  <select
+                    name="odooProductId"
+                    required
+                    className="qw-input"
+                    defaultValue={defaultProductId ?? ''}
+                  >
+                    <option value="">— Sélectionner —</option>
+                    {odooProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.default_code ? `[${p.default_code}] ` : ''}
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  {grammage && (
+                    <span className="block mt-1 text-[11px] text-ink-soft">
+                      Liste filtrée sur {grammage} ·{' '}
+                      <span className="text-gold-dark">
+                        {odooProducts.length} produit{odooProducts.length > 1 ? 's' : ''}
+                      </span>
+                    </span>
+                  )}
+                </label>
+
+                <label className="block">
+                  <span className="qw-label">Quantité</span>
+                  <input
+                    type="number"
+                    name="quantity"
+                    step="1"
+                    min="1"
+                    required
+                    className="qw-input"
+                    defaultValue={request.quantity ?? ''}
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+                >
+                  Créer dans Odoo et envoyer au client
+                </button>
+                <p className="text-[11px] text-ink-soft text-center">
+                  Crée un sale.order draft, applique transport &amp; TVA selon Odoo,
+                  envoie automatiquement le magic link au client.
+                </p>
+              </form>
+            )}
+          </Card>
+
+          <Card title="Lier à un devis Odoo existant">
+            <p className="text-xs text-ink-soft mb-4">
+              Si tu as déjà créé le devis dans Odoo (ou via ton automatisation Python),
+              colle son numéro ici pour le récupérer.
             </p>
             <form action={syncFromOdoo} className="space-y-3">
               <input type="hidden" name="requestId" value={request.id} />
@@ -364,4 +452,56 @@ function formatAddress(addr: Address | null): string {
   let s = lines.join('\n');
   if (addr.carrier_phone) s += `\nTél. : ${addr.carrier_phone}`;
   return s;
+}
+
+interface QuoteRequestRow {
+  packaging?: string | null;
+  packaging_id?: string | null;
+  perso_level?: string | null;
+  grammage?: string | null;
+}
+
+/**
+ * Pick the most likely Odoo product for this request, based on packaging
+ * keywords (white/blanc, noir, argent, or, etc.) and perso level.
+ *
+ * Returns the product id to pre-select in the dropdown, or null if no
+ * confident match.
+ */
+function pickSuggestedProduct(
+  request: QuoteRequestRow,
+  products: OdooProductLite[],
+): number | null {
+  if (!products.length) return null;
+
+  const packaging = (request.packaging ?? '').toLowerCase();
+  const perso = request.perso_level ?? '';
+  const isSemi = perso === 'Semi-perso';
+  const isNeutre = perso === 'Neutre';
+
+  // Match a single-letter color code in the default_code: W=white, OR=or,
+  // G=argent, OW=ecru bambou, CLEAR=transparent.
+  const colorCode = (() => {
+    if (packaging.includes('blanc') || packaging.includes('white')) return 'W';
+    if (packaging.includes('argent') || packaging.includes('grey')) return 'G';
+    if (packaging.includes('transparent') || packaging.includes('clear')) return 'CLEAR';
+    if (packaging.includes('bronze')) return 'OR';
+    if (packaging.includes('ecru') || packaging.includes('bambou')) return 'OW';
+    if (packaging.includes('noir') || packaging.includes('black')) return 'N';
+    return null;
+  })();
+
+  const wantType = isSemi ? 'BLANK' : isNeutre ? 'NEUTRE' : null;
+
+  // Prefer products whose default_code matches both the color and the perso type.
+  for (const p of products) {
+    if (!p.default_code) continue;
+    const code = p.default_code.toUpperCase();
+    if (wantType && !code.includes(wantType)) continue;
+    if (colorCode && !code.includes(colorCode)) continue;
+    return p.id;
+  }
+
+  // Fallback : first matching grammage product
+  return products[0]?.id ?? null;
 }
