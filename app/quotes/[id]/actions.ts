@@ -137,22 +137,22 @@ export async function requestAccessLink(formData: FormData): Promise<void> {
   if (!id || !email) redirect(`/quotes/${id}/access?error=invalid`);
 
   // Look up the quote with the admin client; only send a link if the email
-  // matches. Avoid leaking whether the quote exists.
+  // matches. We deliberately return the same response regardless to avoid
+  // leaking whether the quote/email pair exists.
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data: quote } = await admin
     .from('quotes')
-    .select('email')
+    .select('email, quote_number, subtotal_ht, full_name, company_name')
     .eq('id', id)
     .single();
 
-  if (!data || data.email.toLowerCase() !== email) {
-    // Same response whether the email is wrong or the quote is unknown.
+  if (!quote || quote.email.toLowerCase() !== email) {
     redirect(`/quotes/${id}/access?sent=1`);
   }
 
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL ?? 'https://devis-portal-vpmx.vercel.app';
-  const { error } = await admin.auth.admin.generateLink({
+  const { data: linkData, error } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email,
     options: {
@@ -165,10 +165,70 @@ export async function requestAccessLink(formData: FormData): Promise<void> {
     redirect(`/quotes/${id}/access?error=${encodeURIComponent(error.message)}`);
   }
 
-  // The Supabase project SMTP (or our Resend integration once configured at
-  // the Supabase level) actually delivers the email. Until then, Supabase
-  // sends from its default sender.
+  const magicLink = linkData?.properties?.action_link;
+
+  // generateLink only *generates* the URL; it does NOT send the email.
+  // We deliver it ourselves via Resend.
+  if (process.env.RESEND_API_KEY && magicLink) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: FROM_ADDRESS,
+        to: quote.email,
+        subject: `Accès à votre devis ${quote.quote_number} — Oshibori Concept`,
+        html: renderAccessEmail({
+          customerName: quote.full_name ?? '',
+          companyName: quote.company_name ?? '',
+          quoteNumber: quote.quote_number,
+          link: magicLink,
+        }),
+      });
+    } catch (err) {
+      // Log silently — show the same UI either way to avoid leaking info.
+      console.error('requestAccessLink: Resend send failed', err);
+    }
+  }
+
   redirect(`/quotes/${id}/access?sent=1`);
+}
+
+interface AccessEmailArgs {
+  customerName: string;
+  companyName: string;
+  quoteNumber: string;
+  link: string;
+}
+
+function renderAccessEmail({
+  customerName,
+  companyName,
+  quoteNumber,
+  link,
+}: AccessEmailArgs): string {
+  const greet = customerName ? `Bonjour ${escape(customerName)},` : 'Bonjour,';
+  const co = companyName ? ` (${escape(companyName)})` : '';
+  return `
+<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
+  <div style="text-align: center; margin-bottom: 24px;">
+    <img src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png" alt="Oshibori Concept" style="height: 48px; width: auto;">
+  </div>
+  <h1 style="font-size: 20px; font-weight: 600; margin: 0 0 16px; color: #252525; text-align: center;">
+    Votre nouveau lien d&apos;accès
+  </h1>
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
+    Voici un nouveau lien sécurisé pour consulter le devis
+    <strong>${escape(quoteNumber)}</strong>${co}.
+  </p>
+  <div style="text-align: center; margin: 0 0 24px;">
+    <a href="${escape(link)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
+      Voir mon devis
+    </a>
+  </div>
+  <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
+    Ce lien est à usage unique et expire dans environ 1 h.
+  </p>
+</div>`;
 }
 
 function escape(s: string): string {
