@@ -98,14 +98,37 @@ export async function syncOdooOrderToQuote({
     odoo_synced_at: snapshot.fetchedAt,
   };
 
-  // Upsert by odoo_order_name so re-syncing the same order updates the row.
-  const { data: quote, error: insErr } = await admin
+  // Find existing quote for this Odoo order (so re-syncing updates rather
+  // than duplicates). Avoids ON CONFLICT, which is fragile with partial
+  // unique indexes via PostgREST.
+  const { data: existing } = await admin
     .from('quotes')
-    .upsert(quoteInsert, { onConflict: 'odoo_order_name' })
-    .select('id, quote_number')
-    .single();
-  if (insErr || !quote) {
-    throw new Error(`Insertion devis échouée: ${insErr?.message ?? 'inconnu'}`);
+    .select('id')
+    .eq('odoo_order_name', snapshot.order.name)
+    .maybeSingle();
+
+  let quote: { id: string; quote_number: string };
+  if (existing) {
+    const { data: updated, error: updErr } = await admin
+      .from('quotes')
+      .update(quoteInsert)
+      .eq('id', existing.id)
+      .select('id, quote_number')
+      .single();
+    if (updErr || !updated) {
+      throw new Error(`Mise à jour devis échouée: ${updErr?.message ?? 'inconnu'}`);
+    }
+    quote = updated;
+  } else {
+    const { data: inserted, error: insErr } = await admin
+      .from('quotes')
+      .insert(quoteInsert)
+      .select('id, quote_number')
+      .single();
+    if (insErr || !inserted) {
+      throw new Error(`Insertion devis échouée: ${insErr?.message ?? 'inconnu'}`);
+    }
+    quote = inserted;
   }
 
   await admin
