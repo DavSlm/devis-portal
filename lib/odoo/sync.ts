@@ -263,7 +263,7 @@ function renderClientEmail({
     </a>
   </div>
   <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
-    Ce lien sécurisé expire dans environ 1 h. Vous pouvez en redemander un à tout moment.
+    Ce lien sécurisé reste valide pendant 24 h. Vous pouvez en redemander un à tout moment.
   </p>
 </div>`;
 }

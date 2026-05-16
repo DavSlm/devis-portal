@@ -226,7 +226,7 @@ function renderAccessEmail({
     </a>
   </div>
   <p style="font-size: 12px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
-    Ce lien est à usage unique et expire dans environ 1 h.
+    Ce lien est à usage unique et reste valide pendant 24 h.
   </p>
 </div>`;
 }

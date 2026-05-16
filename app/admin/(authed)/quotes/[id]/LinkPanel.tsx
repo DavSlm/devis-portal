@@ -99,7 +99,7 @@ export function LinkPanel({
             </div>
           </label>
           <p className="text-[11px] text-ink-soft">
-            Ce lien est <strong>à usage unique</strong> et expire après ~1 h. Si le
+            Ce lien est <strong>à usage unique</strong> et reste valide 24 h. Si le
             client ne le clique pas à temps, génère-en un nouveau.
           </p>
         </div>
