@@ -1,30 +1,17 @@
 // =====================================================
-// Mapping Wizard → Odoo product.product variant_id
-// Porté depuis gmail_to_odoo/product_map.py (2026-05).
+// Port VERBATIM de gmail-odoo/product_map.py.
+// Aucune dérive : mêmes maps, mêmes détecteurs (substring matching),
+// même ordre d'évaluation, mêmes défauts, mêmes fallbacks.
 //
-// Clés :
-//   Neutre / Semi : (grammage, couleur, parfum) → variant_id
-//   Full          : (grammage, serviette, parfum) → variant_id
-//
-// Défauts si non précisé : parfum="the blanc", serviette="coton",
-// couleur="blanc".
+// Le résolveur de variant prend une string unique — équivalent du
+// `lookup_name = "{category} {shopify_product}"` côté Python — et fait
+// du substring-matching dessus. La string est assemblée côté wrapper
+// (resolveProductVariant) à partir de l'état wizard.
 // =====================================================
 
 import type { WizardState } from '@/types/wizard';
 
-export type PersoType = 'neutre' | 'semi' | 'full';
-export type Grammage = '15g' | '10g' | '6g';
-export type Couleur =
-  | 'blanc'
-  | 'noir'
-  | 'silver'
-  | 'bronze'
-  | 'transparent'
-  | 'ecru';
-export type Serviette = 'coton' | 'bambou';
-export type Parfum = 'the blanc' | 'the vert' | 'fleur oranger' | 'sans';
-
-// ---- NEUTRE (product.template id=474) ----
+// ── NEUTRE (product.template id=474) ────────────────────────────
 const NEUTRE: Record<string, number> = {
   '15g|blanc|the blanc': 368,
   '15g|noir|the blanc': 365,
@@ -32,24 +19,21 @@ const NEUTRE: Record<string, number> = {
   '15g|bronze|fleur oranger': 375,
   '15g|transparent|the blanc': 331,
   '15g|ecru|the blanc': 1429,
-
   '10g|noir|the vert': 352,
   '10g|blanc|the vert': 355,
-
   '6g|blanc|the blanc': 344,
 };
 
-// ---- SEMI PERSO (product.template id=487) ----
+// ── SEMI PERSO (product.template id=487) ────────────────────────
 const SEMI: Record<string, number> = {
   '15g|blanc|the blanc': 287,
   '15g|noir|the blanc': 295,
   '15g|transparent|the blanc': 331,
-
   '10g|noir|the vert': 280,
   '10g|blanc|the blanc': 271,
 };
 
-// ---- FULL PERSO (product.template id=472) ----
+// ── FULL PERSO (product.template id=472) ────────────────────────
 const FULL: Record<string, number> = {
   // 15g coton
   '15g|coton|the blanc': 1465,
@@ -68,157 +52,81 @@ const FULL: Record<string, number> = {
   '6g|coton|sans': 1445,
 };
 
-// ---- Plateaux ----
-const PLATEAUX_VARIANT_ID = 1014; // PF perso / AREV (ajuster si SKU réel disponible)
+const PLATEAUX_VARIANT_ID = 1014;
 
-
-// =====================================================
-// Wizard-style options for the admin "Choose product" dropdown.
-// The admin sees friendly labels — never Odoo product names —
-// and we map to the Odoo variant_id internally.
-// =====================================================
-
-export type WizardProductGroup =
-  | 'Neutre'
-  | 'Semi-perso'
-  | 'Full perso'
-  | 'Plateaux';
-
-export interface WizardProductOption {
-  key: string;
-  label: string;
-  group: WizardProductGroup;
-  variantId: number;
-}
-
-function labelCouleur(c: string): string {
-  switch (c) {
-    case 'blanc': return 'Blanc';
-    case 'noir': return 'Noir';
-    case 'silver': return 'Argent';
-    case 'bronze': return 'Bronze';
-    case 'transparent': return 'Transparent';
-    case 'ecru': return 'Écru bambou';
-    default: return c;
-  }
-}
-
-function labelParfum(p: string): string {
-  switch (p) {
-    case 'the blanc': return 'Thé Blanc';
-    case 'the vert': return 'Thé Vert';
-    case 'fleur oranger': return "Fleur d'Oranger";
-    case 'sans': return 'Sans parfum';
-    default: return p;
-  }
-}
-
-function labelServiette(s: string): string {
-  return s === 'bambou' ? 'Bambou' : 'Coton';
-}
-
-function buildWizardOptions(): WizardProductOption[] {
-  const out: WizardProductOption[] = [];
-
-  // Neutre
-  for (const [key, variantId] of Object.entries(NEUTRE)) {
-    const [g, c, p] = key.split('|');
-    out.push({
-      key: `neutre|${g}|${c}|${p}`,
-      label: `${g} · ${labelCouleur(c)} · ${labelParfum(p)}`,
-      group: 'Neutre',
-      variantId,
-    });
-  }
-
-  // Semi
-  for (const [key, variantId] of Object.entries(SEMI)) {
-    const [g, c, p] = key.split('|');
-    out.push({
-      key: `semi|${g}|${c}|${p}`,
-      label: `${g} · ${labelCouleur(c)} · ${labelParfum(p)}`,
-      group: 'Semi-perso',
-      variantId,
-    });
-  }
-
-  // Full
-  for (const [key, variantId] of Object.entries(FULL)) {
-    const [g, s, p] = key.split('|');
-    out.push({
-      key: `full|${g}|${s}|${p}`,
-      label: `${g} · ${labelServiette(s)} · ${labelParfum(p)}`,
-      group: 'Full perso',
-      variantId,
-    });
-  }
-
-  out.push({
-    key: 'plateaux',
-    label: 'Plateaux 1×10 — Serviettes sèches',
-    group: 'Plateaux',
-    variantId: PLATEAUX_VARIANT_ID,
-  });
-
-  return out;
-}
-
-export const WIZARD_PRODUCT_OPTIONS: ReadonlyArray<WizardProductOption> =
-  buildWizardOptions();
-
-export function groupedWizardOptions(): Record<
-  WizardProductGroup,
-  WizardProductOption[]
-> {
-  const groups: Record<WizardProductGroup, WizardProductOption[]> = {
-    Neutre: [],
-    'Semi-perso': [],
-    'Full perso': [],
-    Plateaux: [],
-  };
-  for (const o of WIZARD_PRODUCT_OPTIONS) groups[o.group].push(o);
-  return groups;
-}
-
-/** Resolve the Odoo product.product variant_id from a wizard option key
- *  (e.g. 'neutre|15g|blanc|the blanc'). */
-export function variantIdFromWizardKey(key: string): number | null {
-  const found = WIZARD_PRODUCT_OPTIONS.find((o) => o.key === key);
-  return found?.variantId ?? null;
-}
+type PersoType = 'neutre' | 'semi' | 'full';
+type Grammage = '6g' | '10g' | '15g';
+type Couleur =
+  | 'blanc'
+  | 'noir'
+  | 'silver'
+  | 'bronze'
+  | 'transparent'
+  | 'ecru';
+type Serviette = 'coton' | 'bambou';
+type Parfum = 'the blanc' | 'the vert' | 'fleur oranger' | 'sans';
 
 // =====================================================
-// Inference helpers — same heuristics as product_map.py
+// Détecteurs — port verbatim de product_map.py
 // =====================================================
 
-function detectGrammage(text: string): Grammage {
-  const n = text.toLowerCase().replace(/\s/g, '');
-  if (/6g(?!\d)|6gr|6gram/.test(n)) return '6g';
-  if (/10g(?!\d)|10gr|10gram/.test(n)) return '10g';
+function detectType(name: string): PersoType {
+  const n = name.toLowerCase();
+  if (
+    ['full perso', 'full-perso', 'full personaliz', 'full personalis'].some((k) =>
+      n.includes(k),
+    )
+  ) {
+    return 'full';
+  }
+  if (
+    ['semi perso', 'semi-perso', 'semi personaliz', 'semi personalis'].some((k) =>
+      n.includes(k),
+    )
+  ) {
+    return 'semi';
+  }
+  return 'neutre';
+}
+
+function detectGrammage(name: string): Grammage {
+  // Python: name.lower().replace(' ', '') — espaces littéraux uniquement.
+  const n = name.toLowerCase().replace(/ /g, '');
+  if (n.includes('6g') || n.includes('6gr') || n.includes('6gram')) return '6g';
+  if (n.includes('10g') || n.includes('10gr') || n.includes('10gram')) return '10g';
   return '15g';
 }
 
-function detectCouleur(text: string): Couleur {
-  const n = text.toLowerCase();
-  if (/noir|black/.test(n)) return 'noir';
-  if (/silver|argent/.test(n)) return 'silver';
-  if (/bronze|gold|dor[ée]/.test(n)) return 'bronze';
-  if (/transparent|clear|cristal/.test(n)) return 'transparent';
-  if (/ecru|écru|bambou|bamboo|off[- ]?white/.test(n)) return 'ecru';
+function detectCouleur(name: string): Couleur {
+  const n = name.toLowerCase();
+  if (['noir', 'black', 'noire'].some((k) => n.includes(k))) return 'noir';
+  if (['silver', 'argent'].some((k) => n.includes(k))) return 'silver';
+  if (['bronze', 'gold', 'or ', 'doré'].some((k) => n.includes(k))) return 'bronze';
+  if (['transparent', 'clear', 'cristal'].some((k) => n.includes(k))) return 'transparent';
+  if (
+    ['ecru', 'écru', 'bambou', 'bamboo', 'off white', 'off-white', 'offwhite'].some(
+      (k) => n.includes(k),
+    )
+  ) {
+    return 'ecru';
+  }
   return 'blanc';
 }
 
-function detectParfum(text: string): Parfum {
-  const n = text.toLowerCase();
-  if (/oranger|orange blossom/.test(n)) return 'fleur oranger';
-  if (/vert|green tea/.test(n)) return 'the vert';
-  if (/sans|unscent|no scent/.test(n)) return 'sans';
+function detectParfum(name: string): Parfum {
+  const n = name.toLowerCase();
+  if (['oranger', 'orange blossom', 'orange'].some((k) => n.includes(k)))
+    return 'fleur oranger';
+  if (['vert', 'green tea', 'green'].some((k) => n.includes(k))) return 'the vert';
+  if (['sans', 'unscent', 'no scent', 'neutre parfum'].some((k) => n.includes(k)))
+    return 'sans';
   return 'the blanc';
 }
 
-function detectServiette(state: WizardState, text: string): Serviette {
-  if (state.matiere === '80% Bambou - 20% Coton') return 'bambou';
-  return /bambou|bamboo/i.test(text) ? 'bambou' : 'coton';
+function detectServiette(name: string): Serviette {
+  const n = name.toLowerCase();
+  if (['bambou', 'bamboo'].some((k) => n.includes(k))) return 'bambou';
+  return 'coton';
 }
 
 // =====================================================
@@ -232,49 +140,22 @@ export interface ResolvedProduct {
 }
 
 /**
- * Resolve the Odoo product.product variant_id from a WizardState.
- * Returns the resolved id + a human-readable description.
- * If no exact match, falls back to the most generic variant in the same
- * category (blanc/the blanc) and sets `fallback: true`.
+ * Port verbatim de product_map.resolve_variant_id(shopify_name).
+ * Reçoit une string unique et retourne le variant_id + description
+ * en appliquant exactement la même logique de détection et de fallback.
  */
-export function resolveProductVariant(state: WizardState): ResolvedProduct | null {
-  if (!state.productType) return null;
+export function resolveVariantFromName(name: string): ResolvedProduct | null {
+  const ptype = detectType(name);
+  const grammage = detectGrammage(name);
+  const parfum = detectParfum(name);
 
-  // Plateaux short-circuit.
-  if (state.productType === 'Plateaux') {
-    return {
-      variantId: PLATEAUX_VARIANT_ID,
-      description: 'Plateaux 1x10 Serviettes Sèches',
-      fallback: false,
-    };
-  }
-
-  // Build a search string from the relevant fields so we can re-use the
-  // same heuristics used by the Python script.
-  const search = [
-    state.persoLevel ?? '',
-    state.grammage ?? '',
-    state.matiere ?? '',
-    state.packaging ?? '',
-    state.scenteur ?? '',
-  ]
-    .join(' ')
-    .trim();
-
-  const persoLevel = state.persoLevel;
-  const type: PersoType =
-    persoLevel === 'Full perso' ? 'full' : persoLevel === 'Semi-perso' ? 'semi' : 'neutre';
-
-  const grammage = detectGrammage(search);
-  const parfum = detectParfum(search);
-
-  if (type === 'full') {
-    const serviette = detectServiette(state, search);
+  if (ptype === 'full') {
+    const serviette = detectServiette(name);
     const key = `${grammage}|${serviette}|${parfum}`;
-    const variantId = FULL[key];
-    if (variantId) {
+    const vid = FULL[key];
+    if (vid) {
       return {
-        variantId,
+        variantId: vid,
         description: `Full perso ${grammage} ${serviette} ${parfum}`,
         fallback: false,
       };
@@ -283,21 +164,20 @@ export function resolveProductVariant(state: WizardState): ResolvedProduct | nul
     if (fb) {
       return {
         variantId: fb,
-        description: `Full perso ${grammage} coton the blanc (FALLBACK)`,
+        description: `Full perso ${grammage} ${serviette} ${parfum} → FALLBACK coton/thé blanc`,
         fallback: true,
       };
     }
     return null;
   }
 
-  const couleur = detectCouleur(search);
-  const key = `${grammage}|${couleur}|${parfum}`;
-
-  if (type === 'semi') {
-    const variantId = SEMI[key];
-    if (variantId) {
+  if (ptype === 'semi') {
+    const couleur = detectCouleur(name);
+    const key = `${grammage}|${couleur}|${parfum}`;
+    const vid = SEMI[key];
+    if (vid) {
       return {
-        variantId,
+        variantId: vid,
         description: `Semi perso ${grammage} ${couleur} ${parfum}`,
         fallback: false,
       };
@@ -306,18 +186,20 @@ export function resolveProductVariant(state: WizardState): ResolvedProduct | nul
     if (fb) {
       return {
         variantId: fb,
-        description: `Semi perso ${grammage} blanc the blanc (FALLBACK)`,
+        description: `Semi perso ${grammage} ${couleur} ${parfum} → FALLBACK blanc/thé blanc`,
         fallback: true,
       };
     }
     return null;
   }
 
-  // Neutre
-  const variantId = NEUTRE[key];
-  if (variantId) {
+  // neutre
+  const couleur = detectCouleur(name);
+  const key = `${grammage}|${couleur}|${parfum}`;
+  const vid = NEUTRE[key];
+  if (vid) {
     return {
-      variantId,
+      variantId: vid,
       description: `Neutre ${grammage} ${couleur} ${parfum}`,
       fallback: false,
     };
@@ -326,9 +208,47 @@ export function resolveProductVariant(state: WizardState): ResolvedProduct | nul
   if (fb) {
     return {
       variantId: fb,
-      description: `Neutre ${grammage} blanc the blanc (FALLBACK)`,
+      description: `Neutre ${grammage} ${couleur} ${parfum} → FALLBACK blanc/thé blanc`,
       fallback: true,
     };
   }
   return null;
+}
+
+/**
+ * Wrapper pour les WizardState. Construit un `lookup_name` équivalent à ce
+ * que reçoit le script Python (category + product Shopify) en concaténant
+ * tous les champs susceptibles de contenir un mot-clé pertinent. Puis
+ * délègue à resolveVariantFromName().
+ *
+ * Plateaux : court-circuit (le Python ne gère pas ce produit ; on garde le
+ * variant_id direct PF perso / AREV).
+ */
+export function resolveProductVariant(state: WizardState): ResolvedProduct | null {
+  if (!state.productType) return null;
+
+  if (state.productType === 'Plateaux') {
+    return {
+      variantId: PLATEAUX_VARIANT_ID,
+      description: 'Plateaux 1x10 Serviettes Sèches',
+      fallback: false,
+    };
+  }
+
+  // Équivalent du `lookup_name = f"{category} {shopify_product}"` côté Python.
+  // On concatène tous les champs du wizard qui peuvent contenir des mots-clés
+  // détectables.
+  const lookupName = [
+    state.persoLevel,
+    state.grammage,
+    state.matiere,
+    state.packaging,
+    state.scenteur,
+    state.category,
+    state.productType,
+  ]
+    .filter((v) => v != null && v !== '')
+    .join(' ');
+
+  return resolveVariantFromName(lookupName);
 }
