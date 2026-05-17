@@ -1,9 +1,11 @@
 // =====================================================
 // Sync orchestrator: pull an Odoo sale.order, create a `quotes` row,
-// send the magic link to the client.
+// send the devis PDF + RIB en pièce jointe au client (style gmail-odoo).
 // =====================================================
 
 import { Resend } from 'resend';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   fetchSaleOrderSnapshot,
@@ -13,10 +15,14 @@ import {
 
 const FROM_ADDRESS = 'Devis Oshibori <onboarding@resend.dev>';
 
+// Fichier RIB joint à chaque devis envoyé. À placer dans public/documents/
+// (deploy avec le bundle Next.js). Si absent, l'email part avec seulement
+// le PDF du devis Odoo et on log un warning.
+const RIB_FILE_PATH = path.join(process.cwd(), 'public', 'documents', 'rib.pdf');
+
 export interface SyncResult {
   quoteId: string;
   quoteNumber: string;
-  magicLink?: string;
   emailSent: boolean;
   emailError?: string;
 }
@@ -136,25 +142,42 @@ export async function syncOdooOrderToQuote({
     .update({ status: 'converted' })
     .eq('id', request.id);
 
-  // Generate magic link for the client.
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? 'https://devis-portal-vpmx.vercel.app';
-  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email: request.email,
-    options: { redirectTo: `${appUrl}/quotes/${quote.id}/auth` },
-  });
-  if (linkErr) {
-    console.error('generateLink error', linkErr);
-  }
-  const magicLink = linkData?.properties?.action_link;
-  const emailOtp = linkData?.properties?.email_otp;
-  const accessUrl = `${appUrl}/quotes/${quote.id}/access`;
+  // Récupère le PDF du devis Odoo + le RIB statique pour les joindre à
+  // l'email client. Si le PDF Odoo échoue, on bloque (le client recevrait
+  // un email vide). Si le RIB est absent, on envoie quand même avec un warning.
+  const attachments: Array<{ filename: string; content: Buffer }> = [];
 
-  // Send via Resend.
+  try {
+    const pdfResp = await fetch(snapshot.pdfUrl, { cache: 'no-store' });
+    if (!pdfResp.ok) {
+      throw new Error(
+        `Odoo PDF HTTP ${pdfResp.status} sur ${snapshot.pdfUrl}`,
+      );
+    }
+    const pdfBuf = Buffer.from(await pdfResp.arrayBuffer());
+    attachments.push({
+      filename: `${snapshot.order.name}.pdf`,
+      content: pdfBuf,
+    });
+  } catch (err) {
+    throw new Error(
+      `Impossible de récupérer le PDF du devis Odoo : ${(err as Error).message}`,
+    );
+  }
+
+  try {
+    const ribBuf = await fs.readFile(RIB_FILE_PATH);
+    attachments.push({ filename: 'RIB Oshibori Concept.pdf', content: ribBuf });
+  } catch {
+    console.warn(
+      `RIB introuvable à ${RIB_FILE_PATH} — email envoyé sans RIB. Place le fichier rib.pdf dans public/documents/.`,
+    );
+  }
+
+  // Send via Resend with PDF + RIB attached. No more OTP code in the body.
   let emailSent = false;
   let emailError: string | undefined;
-  if (process.env.RESEND_API_KEY && emailOtp) {
+  if (process.env.RESEND_API_KEY) {
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
@@ -166,22 +189,22 @@ export async function syncOdooOrderToQuote({
           companyName: request.company_name ?? '',
           quoteNumber: quote.quote_number,
           totalHt: snapshot.order.amount_untaxed,
-          code: emailOtp,
-          accessUrl,
-          link: magicLink ?? '',
+          hasRib: attachments.length > 1,
         }),
+        attachments,
       });
       emailSent = true;
     } catch (err) {
       emailError = (err as Error).message;
       console.error('Resend send to client failed', err);
     }
+  } else {
+    emailError = 'RESEND_API_KEY non configuré';
   }
 
   return {
     quoteId: quote.id,
     quoteNumber: quote.quote_number,
-    magicLink,
     emailSent,
     emailError,
   };
@@ -223,9 +246,7 @@ interface ClientEmailArgs {
   companyName: string;
   quoteNumber: string;
   totalHt: number;
-  code: string;
-  accessUrl: string;
-  link: string;
+  hasRib: boolean;
 }
 
 function renderClientEmail({
@@ -233,20 +254,14 @@ function renderClientEmail({
   companyName,
   quoteNumber,
   totalHt,
-  code,
-  accessUrl,
-  link,
+  hasRib,
 }: ClientEmailArgs): string {
   const greet = customerName ? `Bonjour ${escapeHtml(customerName)},` : 'Bonjour,';
   const co = companyName ? ` (${escapeHtml(companyName)})` : '';
   const totalLabel = `${totalHt.toFixed(2).replace('.', ',')} €`;
-  const linkBlock = link
-    ? `<div style="text-align: center; margin: 0 0 16px;">
-        <a href="${escapeHtml(link)}" style="font-size: 12px; color: #B89456; text-decoration: underline;">
-          Ou cliquez ici pour accéder directement à votre devis
-        </a>
-      </div>`
-    : '';
+  const attachmentLine = hasRib
+    ? "Veuillez trouver, en pièce jointe, votre devis ainsi que le RIB associé."
+    : "Veuillez trouver, en pièce jointe, votre devis.";
   return `
 <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
   <div style="text-align: center; margin-bottom: 24px;">
@@ -256,9 +271,13 @@ function renderClientEmail({
     Votre devis est prêt
   </h1>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">
+    Merci pour votre demande${co}. ${attachmentLine}
+  </p>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-    Nous avons préparé votre devis personnalisé${co}.
-    Vous pouvez le consulter, télécharger le PDF et l&apos;accepter en ligne.
+    Pour valider ce devis, il vous suffit de nous renvoyer cet email signé
+    avec la mention « Bon pour accord » et de procéder au règlement de
+    l&apos;acompte selon les conditions indiquées.
   </p>
   <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 20px; margin: 0 0 20px; text-align: center;">
     <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
@@ -272,24 +291,10 @@ function renderClientEmail({
     </div>
     <div style="font-size: 24px; font-weight: 600; color: #252525;">${totalLabel}</div>
   </div>
-  <div style="background: #fff; border: 1px solid #EFE7D2; border-radius: 8px; padding: 24px 20px; margin: 0 0 20px; text-align: center;">
-    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #B89456; font-weight: 600; margin-bottom: 12px;">
-      Votre code d'accès
-    </div>
-    <div style="font-family: -apple-system, monospace; font-size: 40px; font-weight: 700; letter-spacing: 0.18em; color: #252525;">
-      ${escapeHtml(code)}
-    </div>
-  </div>
-  <div style="text-align: center; margin: 0 0 16px;">
-    <a href="${escapeHtml(accessUrl)}" style="display: inline-block; padding: 14px 32px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
-      Voir mon devis
-    </a>
-  </div>
-  <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0 0 8px;">
-    Tapez ce code sur la page d'accès, ou cliquez sur le bouton ci-dessus.
-    Le code reste valide 24 h.
+  <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
+    Pour toute question, répondez simplement à cet email.
+    <br/>L&apos;équipe Oshibori Concept reste à votre disposition.
   </p>
-  ${linkBlock}
 </div>`;
 }
 

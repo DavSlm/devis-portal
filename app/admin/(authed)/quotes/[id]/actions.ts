@@ -60,7 +60,6 @@ export async function syncFromOdoo(formData: FormData): Promise<void> {
     sent: '1',
     emailOk: result.emailSent ? '1' : '0',
   });
-  if (result.magicLink) params.set('link', result.magicLink);
   if (result.emailError) params.set('emailError', result.emailError);
   if (result.quoteId) params.set('quote', result.quoteId);
   params.set('odooName', result.quoteNumber);
@@ -248,7 +247,6 @@ export async function sendQuoteToClient(formData: FormData): Promise<void> {
     emailOk: result.emailSent ? '1' : '0',
     odooName: result.quoteNumber,
   });
-  if (result.magicLink) params.set('link', result.magicLink);
   if (result.emailError) params.set('emailError', result.emailError);
   if (result.quoteId) params.set('quote', result.quoteId);
 

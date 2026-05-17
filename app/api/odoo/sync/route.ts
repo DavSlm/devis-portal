@@ -61,7 +61,6 @@ export async function POST(request: NextRequest) {
       quote_number: result.quoteNumber,
       email_sent: result.emailSent,
       email_error: result.emailError ?? null,
-      magic_link: result.magicLink ?? null,
     });
   } catch (err) {
     return NextResponse.json(
