@@ -4,9 +4,11 @@
 // =====================================================
 
 import {
+  attachDeliveryToOrder,
   createPartner,
   createSaleOrder,
   findPartnerByEmail,
+  type AttachDeliveryResult,
   type OdooSaleOrder,
 } from './client';
 import { syncOdooOrderToQuote, type SyncResult } from './sync';
@@ -15,6 +17,7 @@ import {
   countryNameToIso,
   FISCAL_POSITION_LABEL,
   getFiscalPositionId,
+  isEuCountry,
 } from './fiscalPosition';
 import { resolveProductVariant } from './products';
 import type { WizardState } from '@/types/wizard';
@@ -37,6 +40,7 @@ export interface CreateDraftResult extends SyncResult {
   productResolution: { variantId: number; description: string; fallback: boolean };
   fiscalPositionId: number;
   fiscalPositionLabel: string;
+  delivery: AttachDeliveryResult | null;
 }
 
 export async function createOdooDraftFromRequest(
@@ -146,6 +150,18 @@ export async function createOdooDraftFromRequest(
     companyId: parseInt(process.env.ODOO_COMPANY_ID ?? '1', 10),
   });
 
+  // ---- Attach UPS delivery line via choose.delivery.carrier wizard ----
+  // Port verbatim de gmail_to_odoo.add_delivery_to_order.
+  // Europe → carrier 15 (UPS Standard DEVIS), hors Europe → carrier 21 (Expedited).
+  // Si le pays de livraison n'est pas reconnu, on suit le défaut Python : Europe.
+  const isEu = deliveryIso ? isEuCountry(deliveryIso) : true;
+  let delivery: AttachDeliveryResult | null = null;
+  try {
+    delivery = await attachDeliveryToOrder(order.id, isEu);
+  } catch (err) {
+    console.error('attachDeliveryToOrder failed', err);
+  }
+
   // Pull the just-created order back into our DB and send the magic link.
   const sync = await syncOdooOrderToQuote({
     requestId: request.id,
@@ -160,5 +176,6 @@ export async function createOdooDraftFromRequest(
     productResolution,
     fiscalPositionId,
     fiscalPositionLabel,
+    delivery,
   };
 }

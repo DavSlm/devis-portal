@@ -380,6 +380,77 @@ export async function createSaleOrder(
 }
 
 // =====================================================
+// Delivery / shipping — UPS via choose.delivery.carrier wizard
+// Port verbatim de gmail_to_odoo.add_delivery_to_order :
+//   1. sale.order.action_generate_order_packaging
+//   2. choose.delivery.carrier.create({order_id, carrier_id})
+//   3. choose.delivery.carrier.update_price → interroge UPS
+//   4. choose.delivery.carrier.read → delivery_price
+//   5. choose.delivery.carrier.button_confirm → ajoute la ligne
+// =====================================================
+
+// IDs Odoo des carriers cette instance (Oshibori). Voir delivery.carrier.
+export const CARRIER_ID_EU = 15;       // UPS Standard DEVIS
+export const CARRIER_ID_NON_EU = 21;   // Expedited Devis
+
+export interface AttachDeliveryResult {
+  carrierId: number;
+  carrierName: string;
+  deliveryPrice: number;
+  added: boolean;
+}
+
+export async function attachDeliveryToOrder(
+  orderId: number,
+  isEu: boolean,
+): Promise<AttachDeliveryResult> {
+  const carrierId = isEu ? CARRIER_ID_EU : CARRIER_ID_NON_EU;
+  const carrierName = isEu ? 'UPS Standard DEVIS' : 'Expedited Devis';
+
+  // 1. Génère les lignes de conditionnement (cartons / master cartons).
+  //    Côté Python certaines versions Odoo retournent None → "cannot marshal None"
+  //    en XML-RPC. En JSON-RPC null est valide, mais on garde le try/catch défensif.
+  try {
+    await executeKw<unknown>('sale.order', 'action_generate_order_packaging', [[orderId]]);
+  } catch {
+    // non-fatal
+  }
+
+  // 2. Crée le wizard.
+  const wizardId = await executeKw<number>(
+    'choose.delivery.carrier',
+    'create',
+    [{ order_id: orderId, carrier_id: carrierId }],
+  );
+
+  // 3. Demande le prix à UPS et le lit sur le wizard.
+  let deliveryPrice = 0;
+  try {
+    await executeKw<unknown>('choose.delivery.carrier', 'update_price', [[wizardId]]);
+    const rows = await executeKw<Array<{ delivery_price: number | false }>>(
+      'choose.delivery.carrier',
+      'read',
+      [[wizardId]],
+      { fields: ['delivery_price'] },
+    );
+    deliveryPrice = Number(rows[0]?.delivery_price) || 0;
+  } catch (err) {
+    console.warn('update_price failed', err);
+  }
+
+  // 4. Confirme → ajoute la ligne de transport sur la sale.order.
+  let added = true;
+  try {
+    await executeKw<unknown>('choose.delivery.carrier', 'button_confirm', [[wizardId]]);
+  } catch (err) {
+    console.warn('button_confirm failed', err);
+    added = false;
+  }
+
+  return { carrierId, carrierName, deliveryPrice, added };
+}
+
+// =====================================================
 // High-level orchestrator: fetch sale order + lines + ensure token
 // =====================================================
 
