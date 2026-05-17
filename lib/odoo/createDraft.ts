@@ -36,6 +36,7 @@ export interface CreateDraftResult {
   odooOrder: OdooSaleOrder;
   partnerId: number;
   partnerCreated: boolean;
+  vatRejected: boolean;
   productResolution: { variantId: number; description: string; fallback: boolean };
   fiscalPositionId: number;
   fiscalPositionLabel: string;
@@ -201,18 +202,28 @@ export async function createOdooDraftFromRequest(
   const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
   const delivery = await attachDeliveryToOrder(order.id, isEu);
 
-  // Mémorise le nom du devis Odoo sur la quote_request. Le bouton "Envoyer
-  // au client" lira cette valeur pour déclencher le sync + magic link.
-  // Pas d'envoi à ce stade — l'admin doit pouvoir valider dans Odoo d'abord.
-  await admin
+  // Mémorise le nom + id du devis Odoo sur la quote_request. Le bouton
+  // "Envoyer au client" lira cette valeur pour déclencher le sync + magic
+  // link, et la page admin affiche un lien direct "Accéder au devis".
+  const { error: updateErr } = await admin
     .from('quote_requests')
-    .update({ odoo_order_name: order.name, status: 'reviewed' })
+    .update({
+      odoo_order_name: order.name,
+      odoo_order_id: order.id,
+      status: 'reviewed',
+    })
     .eq('id', request.id);
+  if (updateErr) {
+    throw new Error(
+      `Devis ${order.name} créé dans Odoo mais impossible de mémoriser le lien côté portail : ${updateErr.message}. La migration Supabase a-t-elle été appliquée ? (colonnes odoo_order_name + odoo_order_id sur quote_requests)`,
+    );
+  }
 
   return {
     odooOrder: order,
     partnerId: partnerResult.partnerId,
     partnerCreated: partnerResult.created,
+    vatRejected: !!partnerResult.vatRejected,
     productResolution,
     fiscalPositionId,
     fiscalPositionLabel,

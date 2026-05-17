@@ -165,6 +165,7 @@ export async function generateOdooDraft(formData: FormData): Promise<void> {
     odooCreated: '1',
     odooName: result.odooOrder.name,
   });
+  if (result.vatRejected) params.set('vatRejected', '1');
   redirect(`/admin/quotes/${requestId}?${params.toString()}`);
 }
 

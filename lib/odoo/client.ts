@@ -300,11 +300,19 @@ export interface CreatePartnerInput {
   isCompany?: boolean;
 }
 
+export interface CreatePartnerResult {
+  partnerId: number;
+  vatRejected: boolean;
+}
+
 /**
- * Crée un res.partner. Si Odoo refuse le VAT (TVA invalide), retry sans
- * le champ vat. Port verbatim de find_or_create_partner L.1411-1425.
+ * Crée un res.partner. Si Odoo refuse le VAT (TVA invalide, ex. échec VIES),
+ * retry sans le champ vat et flag `vatRejected: true` pour que l'admin soit
+ * averti dans l'UI. Port verbatim de find_or_create_partner L.1411-1425.
  */
-export async function createPartner(input: CreatePartnerInput): Promise<number> {
+export async function createPartner(
+  input: CreatePartnerInput,
+): Promise<CreatePartnerResult> {
   const data: Record<string, unknown> = {
     name: input.name,
     email: input.email,
@@ -326,7 +334,8 @@ export async function createPartner(input: CreatePartnerInput): Promise<number> 
   if (countryId) data.country_id = countryId;
 
   try {
-    return await executeKw<number>('res.partner', 'create', [data]);
+    const partnerId = await executeKw<number>('res.partner', 'create', [data]);
+    return { partnerId, vatRejected: false };
   } catch (err) {
     const msg = (err as Error).message ?? '';
     const looksLikeVatError =
@@ -334,7 +343,8 @@ export async function createPartner(input: CreatePartnerInput): Promise<number> 
     if (!looksLikeVatError) throw err;
     console.warn(`TVA invalide « ${input.vat} » ignorée, création sans TVA.`);
     delete data.vat;
-    return executeKw<number>('res.partner', 'create', [data]);
+    const partnerId = await executeKw<number>('res.partner', 'create', [data]);
+    return { partnerId, vatRejected: true };
   }
 }
 
@@ -417,6 +427,8 @@ export interface FindOrCreatePartnerResult {
   deliveryAddressId?: number;
   /** id du child invoice si créé, sinon undefined. */
   invoiceAddressId?: number;
+  /** true si Odoo a refusé le VAT fourni et que le partner a été créé sans. */
+  vatRejected?: boolean;
 }
 
 /**
@@ -465,9 +477,8 @@ export async function findOrCreatePartner(
 
   // ── Particulier ───────────────────────────────────────────────
   if (!company) {
-    const personName = `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim();
-    const partnerId = await createPartner({
-      name: personName || input.email,
+    const created = await createPartner({
+      name: `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim() || input.email,
       email: input.email,
       phone: input.phone,
       lang: input.lang,
@@ -479,11 +490,16 @@ export async function findOrCreatePartner(
       countryName: input.delivery.countryName,
       countryIso: input.delivery.countryIso,
     });
-    return { partnerId, created: true, isCompany: false };
+    return {
+      partnerId: created.partnerId,
+      created: true,
+      isCompany: false,
+      vatRejected: created.vatRejected,
+    };
   }
 
   // ── Société + enfants delivery / invoice ──────────────────────
-  const companyId = await createPartner({
+  const companyResult = await createPartner({
     name: company,
     email: input.email,
     phone: input.phone,
@@ -498,6 +514,7 @@ export async function findOrCreatePartner(
     countryName: input.delivery.countryName,
     countryIso: input.delivery.countryIso,
   });
+  const companyId = companyResult.partnerId;
 
   let deliveryAddressId: number | undefined;
   if (
@@ -553,6 +570,7 @@ export async function findOrCreatePartner(
     isCompany: true,
     deliveryAddressId,
     invoiceAddressId,
+    vatRejected: companyResult.vatRejected,
   };
 }
 

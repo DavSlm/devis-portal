@@ -26,13 +26,15 @@ interface PageProps {
     quote?: string;
     odooError?: string;
     odooName?: string;
+    vatRejected?: string;
   }>;
 }
 
 export default async function QuoteRequestDetail({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { sent, emailOk, link, emailError, quote: quoteId, odooError } =
+  const { sent, emailOk, link, emailError, quote: quoteId, odooError, vatRejected } =
     await searchParams;
+  const odooBaseUrl = (process.env.ODOO_URL ?? '').replace(/\/$/, '');
 
   const supabase = createAdminClient();
 
@@ -102,6 +104,25 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
         >
           <strong className="block mb-1">Erreur Odoo</strong>
           <span>{decodeURIComponent(odooError)}</span>
+        </div>
+      )}
+
+      {vatRejected === '1' && (
+        <div
+          className="rounded-[var(--qw-card-radius)] border p-4 text-sm"
+          style={{
+            background: 'rgba(234, 179, 8, 0.10)',
+            borderColor: 'rgba(234, 179, 8, 0.35)',
+            color: '#92400e',
+          }}
+        >
+          <strong className="block mb-1">TVA refusée par Odoo</strong>
+          <span>
+            Le numéro de TVA fourni{request.vat_number ? ` (${request.vat_number})` : ''} a
+            été refusé par Odoo (échec de validation VIES). Le partner a été créé
+            <strong> sans TVA</strong> — si le numéro est correct, ajoute-le manuellement
+            sur la fiche société dans Odoo.
+          </span>
         </div>
       )}
 
@@ -179,7 +200,7 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
               )}
 
               {request.odoo_order_name ? (
-                /* ── Étape 2 : devis déjà créé dans Odoo → envoyer au client ── */
+                /* ── Étape 2 : devis déjà créé dans Odoo → accès + envoyer ── */
                 <div className="space-y-3 pt-2">
                   <div className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-[var(--qw-cream)] p-3">
                     <p className="text-xs text-ink-soft uppercase tracking-[0.06em] mb-1">
@@ -193,6 +214,17 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                       d&apos;envoyer le devis au client.
                     </p>
                   </div>
+
+                  {request.odoo_order_id && odooBaseUrl && (
+                    <a
+                      href={`${odooBaseUrl}/odoo/sales/${request.odoo_order_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full text-center py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold border border-[var(--qw-gold)] text-gold-dark hover:bg-[var(--qw-gold-light)] transition-all"
+                    >
+                      Accéder au devis dans Odoo ↗
+                    </a>
+                  )}
 
                   <form action={sendQuoteToClient}>
                     <input type="hidden" name="requestId" value={request.id} />
