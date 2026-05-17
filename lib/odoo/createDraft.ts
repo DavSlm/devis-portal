@@ -1,6 +1,7 @@
 // =====================================================
 // High-level: build an Odoo sale.order draft directly from a quote_request
-// row, then sync it back to our DB and send the magic link.
+// row. Stores the order name on the quote_request for the second step
+// ("Envoyer au client") to pick up — does NOT sync nor send any email.
 // =====================================================
 
 import {
@@ -10,7 +11,6 @@ import {
   type AttachDeliveryResult,
   type OdooSaleOrder,
 } from './client';
-import { syncOdooOrderToQuote, type SyncResult } from './sync';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   countryNameToIso,
@@ -32,7 +32,7 @@ export interface CreateDraftInput {
   description?: string;
 }
 
-export interface CreateDraftResult extends SyncResult {
+export interface CreateDraftResult {
   odooOrder: OdooSaleOrder;
   partnerId: number;
   partnerCreated: boolean;
@@ -201,14 +201,15 @@ export async function createOdooDraftFromRequest(
   const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
   const delivery = await attachDeliveryToOrder(order.id, isEu);
 
-  // Pull the just-created order back into our DB and send the magic link.
-  const sync = await syncOdooOrderToQuote({
-    requestId: request.id,
-    odooOrderName: order.name,
-  });
+  // Mémorise le nom du devis Odoo sur la quote_request. Le bouton "Envoyer
+  // au client" lira cette valeur pour déclencher le sync + magic link.
+  // Pas d'envoi à ce stade — l'admin doit pouvoir valider dans Odoo d'abord.
+  await admin
+    .from('quote_requests')
+    .update({ odoo_order_name: order.name, status: 'reviewed' })
+    .eq('id', request.id);
 
   return {
-    ...sync,
     odooOrder: order,
     partnerId: partnerResult.partnerId,
     partnerCreated: partnerResult.created,

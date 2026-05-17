@@ -159,11 +159,58 @@ export async function generateOdooDraft(formData: FormData): Promise<void> {
   revalidatePath('/admin');
   revalidatePath(`/admin/quotes/${requestId}`);
 
+  // Devis créé dans Odoo mais PAS envoyé au client. David doit valider/
+  // ajuster dans Odoo puis cliquer "Envoyer au client" depuis l'admin.
+  const params = new URLSearchParams({
+    odooCreated: '1',
+    odooName: result.odooOrder.name,
+  });
+  redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+}
+
+/**
+ * Envoie le magic link au client pour un devis Odoo déjà créé via
+ * "Créer dans Odoo". Lit `odoo_order_name` depuis la quote_request et
+ * réutilise le flow sync existant.
+ */
+export async function sendQuoteToClient(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  if (!requestId) throw new Error('requestId manquant');
+
+  const supabase = createAdminClient();
+  const { data: request, error } = await supabase
+    .from('quote_requests')
+    .select('odoo_order_name')
+    .eq('id', requestId)
+    .single();
+  if (error || !request) throw new Error('Demande introuvable');
+  if (!request.odoo_order_name) {
+    const params = new URLSearchParams({
+      odooError: 'Aucun devis Odoo lié à cette demande — clique d\'abord sur "Créer dans Odoo".',
+    });
+    redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+  }
+
+  let result;
+  try {
+    result = await syncOdooOrderToQuote({
+      requestId,
+      odooOrderName: request.odoo_order_name,
+    });
+  } catch (err) {
+    const params = new URLSearchParams({
+      odooError: (err as Error).message,
+    });
+    redirect(`/admin/quotes/${requestId}?${params.toString()}`);
+  }
+
+  revalidatePath('/admin');
+  revalidatePath(`/admin/quotes/${requestId}`);
+
   const params = new URLSearchParams({
     sent: '1',
     emailOk: result.emailSent ? '1' : '0',
     odooName: result.quoteNumber,
-    odooCreated: '1',
   });
   if (result.magicLink) params.set('link', result.magicLink);
   if (result.emailError) params.set('emailError', result.emailError);

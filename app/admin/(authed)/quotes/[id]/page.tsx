@@ -6,6 +6,7 @@ import {
   archiveRequest,
   generateOdooDraft,
   regenerateClientLink,
+  sendQuoteToClient,
   syncFromOdoo,
   updateInternalNotes,
 } from './actions';
@@ -145,9 +146,7 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
           </Card>
 
           <Card title="Configuration produit">
-            <form action={generateOdooDraft} className="space-y-2">
-              <input type="hidden" name="requestId" value={request.id} />
-
+            <div className="space-y-2">
               <KV label="Produit" value={request.product_type} />
               {request.perso_level && (
                 <KV label="Personnalisation" value={request.perso_level} />
@@ -156,25 +155,6 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
               {request.grammage && <KV label="Grammage" value={request.grammage} />}
               {request.matiere && <KV label="Matière" value={request.matiere} />}
               {request.packaging && <KV label="Emballage" value={request.packaging} />}
-
-              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
-                <label
-                  htmlFor="quantity"
-                  className="text-xs uppercase tracking-[0.06em] text-ink-soft"
-                >
-                  Quantité
-                </label>
-                <input
-                  id="quantity"
-                  type="number"
-                  name="quantity"
-                  step="1"
-                  min="1"
-                  required
-                  className="qw-input"
-                  defaultValue={request.quantity ?? ''}
-                />
-              </div>
 
               <KV
                 label="Estimation HT"
@@ -198,17 +178,72 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                 </p>
               )}
 
-              <button
-                type="submit"
-                className="w-full mt-3 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
-              >
-                Créer dans Odoo et envoyer au client
-              </button>
-              <p className="text-[11px] text-ink-soft text-center pt-1">
-                Le produit Odoo est résolu automatiquement depuis cette configuration —
-                position fiscale, transport &amp; TVA appliqués par Odoo.
-              </p>
-            </form>
+              {request.odoo_order_name ? (
+                /* ── Étape 2 : devis déjà créé dans Odoo → envoyer au client ── */
+                <div className="space-y-3 pt-2">
+                  <div className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-[var(--qw-cream)] p-3">
+                    <p className="text-xs text-ink-soft uppercase tracking-[0.06em] mb-1">
+                      Devis Odoo créé
+                    </p>
+                    <p className="font-mono text-sm text-ink">
+                      {request.odoo_order_name}
+                    </p>
+                    <p className="text-[11px] text-ink-soft mt-1">
+                      Vérifie et ajuste dans Odoo (prix, taxes, transport) avant
+                      d&apos;envoyer le devis au client.
+                    </p>
+                  </div>
+
+                  <form action={sendQuoteToClient}>
+                    <input type="hidden" name="requestId" value={request.id} />
+                    <button
+                      type="submit"
+                      className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+                    >
+                      Envoyer le devis au client
+                    </button>
+                    <p className="text-[11px] text-ink-soft text-center pt-1">
+                      Snapshot du devis Odoo + magic link envoyé au client.
+                    </p>
+                  </form>
+                </div>
+              ) : (
+                /* ── Étape 1 : pas encore créé dans Odoo ── */
+                <form action={generateOdooDraft} className="space-y-2 pt-2">
+                  <input type="hidden" name="requestId" value={request.id} />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
+                    <label
+                      htmlFor="quantity"
+                      className="text-xs uppercase tracking-[0.06em] text-ink-soft"
+                    >
+                      Quantité
+                    </label>
+                    <input
+                      id="quantity"
+                      type="number"
+                      name="quantity"
+                      step="1"
+                      min="1"
+                      required
+                      className="qw-input"
+                      defaultValue={request.quantity ?? ''}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full mt-3 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+                  >
+                    Créer dans Odoo
+                  </button>
+                  <p className="text-[11px] text-ink-soft text-center pt-1">
+                    Crée la sale.order, attache le transport et le partner.
+                    Le client n&apos;est PAS encore notifié — étape 2 ensuite.
+                  </p>
+                </form>
+              )}
+            </div>
           </Card>
 
           {(request.brief || request.file_url) && (
