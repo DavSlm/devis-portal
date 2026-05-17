@@ -284,6 +284,177 @@ async function findCountryIdByIso(iso: string): Promise<number | null> {
   return rows[0]?.id ?? null;
 }
 
+export interface UpdatePartnerInput {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  street?: string | null;
+  street2?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  countryName?: string | null;
+  countryIso?: string | null;
+  vat?: string | null;
+  siret?: string | null;
+  lang?: string | null;
+}
+
+export interface UpdatePartnerResult {
+  vatRejected: boolean;
+}
+
+/**
+ * Update d'un res.partner existant. Si Odoo refuse le VAT, retry sans
+ * (même logique que createPartner). Champs `null` → ignorés ; champs `''`
+ * → vidés dans Odoo (set explicit pour pouvoir effacer une valeur).
+ */
+export async function updatePartner(
+  partnerId: number,
+  input: UpdatePartnerInput,
+): Promise<UpdatePartnerResult> {
+  const data: Record<string, unknown> = {};
+  if (input.name !== undefined && input.name !== null) data.name = input.name;
+  if (input.email !== undefined && input.email !== null) data.email = input.email;
+  if (input.phone !== undefined && input.phone !== null) data.phone = input.phone;
+  if (input.street !== undefined && input.street !== null) data.street = input.street;
+  if (input.street2 !== undefined && input.street2 !== null) data.street2 = input.street2;
+  if (input.zip !== undefined && input.zip !== null) data.zip = input.zip;
+  if (input.city !== undefined && input.city !== null) data.city = input.city;
+  if (input.vat !== undefined && input.vat !== null) data.vat = input.vat;
+  if (input.siret !== undefined && input.siret !== null)
+    data.company_registry = input.siret.replace(/\s+/g, '');
+  if (input.lang !== undefined && input.lang !== null) data.lang = input.lang;
+
+  let countryId: number | null = null;
+  if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
+  if (!countryId && input.countryName)
+    countryId = await findCountryIdByName(input.countryName);
+  if (countryId) data.country_id = countryId;
+
+  if (Object.keys(data).length === 0) return { vatRejected: false };
+
+  try {
+    await executeKw<boolean>('res.partner', 'write', [[partnerId], data]);
+    return { vatRejected: false };
+  } catch (err) {
+    const msg = (err as Error).message ?? '';
+    const looksLikeVatError =
+      input.vat && /\bvat\b|tva|numéro\s*vat/i.test(msg);
+    if (!looksLikeVatError) throw err;
+    console.warn(`TVA invalide « ${input.vat} » ignorée à l'update.`);
+    delete data.vat;
+    if (Object.keys(data).length > 0) {
+      await executeKw<boolean>('res.partner', 'write', [[partnerId], data]);
+    }
+    return { vatRejected: true };
+  }
+}
+
+/**
+ * Cherche le premier enfant d'un partner pour un type donné (delivery / invoice).
+ * Utilisé pour savoir s'il faut update ou create un child address.
+ */
+export async function findChildAddressByType(
+  parentId: number,
+  type: 'delivery' | 'invoice',
+): Promise<number | null> {
+  const rows = await executeKw<Array<{ id: number }>>(
+    'res.partner',
+    'search_read',
+    [[['parent_id', '=', parentId], ['type', '=', type]]],
+    { fields: ['id'], limit: 1, order: 'id desc' },
+  );
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Update un enfant d'adresse existant (delivery ou invoice). Si aucun
+ * enfant n'existe encore pour ce type, en crée un nouveau.
+ */
+export async function upsertChildAddress(
+  parentId: number,
+  type: 'delivery' | 'invoice',
+  input: Omit<CreateChildAddressInput, 'parentId' | 'type'>,
+): Promise<number> {
+  const existing = await findChildAddressByType(parentId, type);
+  if (!existing) {
+    return createChildAddress({ parentId, type, ...input });
+  }
+  const data: Record<string, unknown> = {};
+  if (input.name !== undefined) data.name = input.name ?? '';
+  if (input.street !== undefined && input.street !== null) data.street = input.street;
+  if (input.street2 !== undefined && input.street2 !== null) data.street2 = input.street2;
+  if (input.zip !== undefined && input.zip !== null) data.zip = input.zip;
+  if (input.city !== undefined && input.city !== null) data.city = input.city;
+  if (input.email !== undefined && input.email !== null) data.email = input.email;
+  if (input.phone !== undefined && input.phone !== null) data.phone = input.phone;
+
+  let countryId: number | null = null;
+  if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
+  if (!countryId && input.countryName)
+    countryId = await findCountryIdByName(input.countryName);
+  if (countryId) data.country_id = countryId;
+
+  if (Object.keys(data).length > 0) {
+    await executeKw<boolean>('res.partner', 'write', [[existing], data]);
+  }
+  return existing;
+}
+
+export interface UpdateOrderLineInput {
+  productId?: number;
+  quantity?: number;
+}
+
+/**
+ * Update une sale.order.line existante. Si productId change, on supprime
+ * et recrée pour déclencher les onchange (price_unit, tax_ids).
+ */
+export async function updateOrderLine(
+  lineId: number,
+  input: UpdateOrderLineInput,
+): Promise<void> {
+  const data: Record<string, unknown> = {};
+  if (input.productId !== undefined) data.product_id = input.productId;
+  if (input.quantity !== undefined) data.product_uom_qty = input.quantity;
+  if (Object.keys(data).length === 0) return;
+  await executeKw<boolean>('sale.order.line', 'write', [[lineId], data]);
+}
+
+/**
+ * Supprime une sale.order.line. Utilisé quand on change le produit pour
+ * recréer une nouvelle ligne (Odoo déclenchera les onchange correctement).
+ */
+export async function unlinkOrderLine(lineId: number): Promise<void> {
+  await executeKw<boolean>('sale.order.line', 'unlink', [[lineId]]);
+}
+
+/**
+ * Récupère les lignes non-delivery d'une sale.order. Utile pour repérer
+ * la ligne produit principale à update quand la config change.
+ */
+export async function findOrderProductLines(orderId: number): Promise<number[]> {
+  const rows = await executeKw<Array<{ id: number }>>(
+    'sale.order.line',
+    'search_read',
+    [[['order_id', '=', orderId], ['is_delivery', '=', false]]],
+    { fields: ['id'], order: 'id asc' },
+  );
+  return rows.map((r) => r.id);
+}
+
+export async function updateSaleOrder(
+  orderId: number,
+  data: { fiscalPositionId?: number; note?: string; clientOrderRef?: string },
+): Promise<void> {
+  const vals: Record<string, unknown> = {};
+  if (data.fiscalPositionId !== undefined) vals.fiscal_position_id = data.fiscalPositionId;
+  if (data.note !== undefined) vals.note = data.note;
+  if (data.clientOrderRef !== undefined) vals.client_order_ref = data.clientOrderRef;
+  if (Object.keys(vals).length === 0) return;
+  await executeKw<boolean>('sale.order', 'write', [[orderId], vals]);
+}
+
 export interface CreatePartnerInput {
   name: string;
   email: string;

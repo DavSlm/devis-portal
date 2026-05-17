@@ -7,6 +7,21 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
 import { createOdooDraftFromRequest } from '@/lib/odoo/createDraft';
+import {
+  findOrderProductLines,
+  unlinkOrderLine,
+  updateOrderLine,
+  updatePartner,
+  updateSaleOrder,
+  upsertChildAddress,
+  executeKw,
+} from '@/lib/odoo/client';
+import {
+  countryNameToIso,
+  getFiscalPositionId,
+} from '@/lib/odoo/fiscalPosition';
+import { resolveProductVariant } from '@/lib/odoo/products';
+import type { WizardState } from '@/types/wizard';
 
 // =====================================================
 // Sprint 4 — Odoo-based flow
@@ -504,4 +519,321 @@ function escapeHtml(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// =====================================================
+// Édition des demandes de devis depuis l'admin.
+// Si la demande a déjà un devis Odoo lié (odoo_order_id), les modifs
+// sont aussi propagées sur le res.partner / sale.order correspondants.
+// =====================================================
+
+interface RequestWithOdoo {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  company_name: string | null;
+  vat_number: string | null;
+  siret: string | null;
+  phone: string | null;
+  shipping_address: Record<string, string | null> | null;
+  billing_address: Record<string, string | null> | null;
+  product_type: string | null;
+  perso_level: string | null;
+  category: string | null;
+  grammage: string | null;
+  matiere: string | null;
+  packaging: string | null;
+  quantity: number | null;
+  odoo_order_id: number | null;
+  odoo_order_name: string | null;
+}
+
+async function loadRequest(requestId: string): Promise<RequestWithOdoo> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from('quote_requests')
+    .select('*')
+    .eq('id', requestId)
+    .single();
+  if (error || !data) throw new Error(`Demande introuvable : ${error?.message ?? ''}`);
+  return data as RequestWithOdoo;
+}
+
+async function getPartnerIdForOrder(orderId: number): Promise<number | null> {
+  const rows = await executeKw<Array<{ partner_id: [number, string] | false }>>(
+    'sale.order',
+    'read',
+    [[orderId]],
+    { fields: ['partner_id'] },
+  );
+  const m2o = rows[0]?.partner_id;
+  return Array.isArray(m2o) ? m2o[0] : null;
+}
+
+function redirectBack(
+  requestId: string,
+  extra: Record<string, string> = {},
+): never {
+  const params = new URLSearchParams(extra);
+  const qs = params.toString();
+  redirect(`/admin/quotes/${requestId}${qs ? `?${qs}` : ''}`);
+}
+
+export async function updateContact(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  if (!requestId) throw new Error('requestId manquant');
+
+  const full_name = String(formData.get('full_name') ?? '').trim();
+  const email = String(formData.get('email') ?? '').trim();
+  const phone = String(formData.get('phone') ?? '').trim();
+  const company_name = String(formData.get('company_name') ?? '').trim();
+  const siret = String(formData.get('siret') ?? '').trim();
+  const vat_number = String(formData.get('vat_number') ?? '').trim();
+
+  if (!email || !/\S+@\S+\.\S+/.test(email)) {
+    redirectBack(requestId, { odooError: 'Email invalide.' });
+  }
+
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({
+      full_name: full_name || null,
+      email,
+      phone: phone || null,
+      company_name: company_name || null,
+      siret: siret || null,
+      vat_number: vat_number || null,
+    })
+    .eq('id', requestId);
+
+  // Sync Odoo si un partner existe déjà.
+  const request = await loadRequest(requestId);
+  let vatRejected = false;
+  if (request.odoo_order_id) {
+    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+    if (partnerId) {
+      const isCompany = !!company_name;
+      const result = await updatePartner(partnerId, {
+        name: isCompany ? company_name : full_name || email,
+        email,
+        phone,
+        vat: vat_number,
+        siret,
+      });
+      vatRejected = result.vatRejected;
+    }
+  }
+
+  revalidatePath(`/admin/quotes/${requestId}`);
+  redirectBack(requestId, vatRejected ? { vatRejected: '1' } : {});
+}
+
+export async function updateShipping(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  if (!requestId) throw new Error('requestId manquant');
+
+  const shipping = {
+    contact: (String(formData.get('contact') ?? '').trim() || null) as string | null,
+    street1: (String(formData.get('street1') ?? '').trim() || null) as string | null,
+    street2: (String(formData.get('street2') ?? '').trim() || null) as string | null,
+    postal_code:
+      (String(formData.get('postal_code') ?? '').trim() || null) as string | null,
+    city: (String(formData.get('city') ?? '').trim() || null) as string | null,
+    state: (String(formData.get('state') ?? '').trim() || null) as string | null,
+    country: (String(formData.get('country') ?? '').trim() || null) as string | null,
+    carrier_phone:
+      (String(formData.get('carrier_phone') ?? '').trim() || null) as string | null,
+  };
+
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({ shipping_address: shipping })
+    .eq('id', requestId);
+
+  const request = await loadRequest(requestId);
+  if (request.odoo_order_id) {
+    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+    if (partnerId) {
+      // Update main partner (street/zip/city/country dupliqués côté Python).
+      await updatePartner(partnerId, {
+        street: shipping.street1,
+        street2: shipping.street2,
+        zip: shipping.postal_code,
+        city: shipping.city,
+        countryName: shipping.country,
+        phone: shipping.carrier_phone || request.phone || null,
+      });
+      // Update child delivery (ou crée s'il n'existe pas).
+      await upsertChildAddress(partnerId, 'delivery', {
+        name: shipping.contact ?? '',
+        street: shipping.street1,
+        street2: shipping.street2,
+        zip: shipping.postal_code,
+        city: shipping.city,
+        countryName: shipping.country,
+        email: request.email ?? undefined,
+        phone: shipping.carrier_phone || request.phone || null,
+      });
+      // Recompute fiscal position from new country.
+      const deliveryIso = countryNameToIso(shipping.country);
+      const billing = request.billing_address;
+      const billingIso = countryNameToIso(
+        (billing?.country as string | null) ?? shipping.country ?? null,
+      );
+      const hasVat = !!(request.vat_number && request.vat_number.trim());
+      const fpId = getFiscalPositionId(billingIso, deliveryIso, hasVat);
+      await updateSaleOrder(request.odoo_order_id, { fiscalPositionId: fpId });
+    }
+  }
+
+  revalidatePath(`/admin/quotes/${requestId}`);
+  redirectBack(requestId);
+}
+
+export async function updateBilling(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  if (!requestId) throw new Error('requestId manquant');
+
+  const sameAsShipping = formData.get('same_as_shipping') === '1';
+
+  let billing: Record<string, string | null> | null = null;
+  if (!sameAsShipping) {
+    billing = {
+      street1: String(formData.get('street1') ?? '').trim() || null,
+      street2: String(formData.get('street2') ?? '').trim() || null,
+      postal_code: String(formData.get('postal_code') ?? '').trim() || null,
+      city: String(formData.get('city') ?? '').trim() || null,
+      country: String(formData.get('country') ?? '').trim() || null,
+    };
+  }
+
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({ billing_address: billing })
+    .eq('id', requestId);
+
+  const request = await loadRequest(requestId);
+  if (request.odoo_order_id && billing) {
+    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+    if (partnerId) {
+      await upsertChildAddress(partnerId, 'invoice', {
+        street: billing.street1,
+        street2: billing.street2,
+        zip: billing.postal_code,
+        city: billing.city,
+        countryName: billing.country,
+        email: request.email ?? undefined,
+        phone: request.phone ?? null,
+      });
+      // Recompute fiscal position (billing country can change it).
+      const shipping = request.shipping_address;
+      const deliveryIso = countryNameToIso(
+        (shipping?.country as string | null) ?? null,
+      );
+      const billingIso = countryNameToIso(billing.country ?? deliveryIso);
+      const hasVat = !!(request.vat_number && request.vat_number.trim());
+      const fpId = getFiscalPositionId(billingIso, deliveryIso, hasVat);
+      await updateSaleOrder(request.odoo_order_id, { fiscalPositionId: fpId });
+    }
+  }
+
+  revalidatePath(`/admin/quotes/${requestId}`);
+  redirectBack(requestId);
+}
+
+export async function updateProductConfig(formData: FormData): Promise<void> {
+  const requestId = String(formData.get('requestId') ?? '');
+  if (!requestId) throw new Error('requestId manquant');
+
+  const product_type = String(formData.get('product_type') ?? '').trim() || null;
+  const perso_level = String(formData.get('perso_level') ?? '').trim() || null;
+  const category = String(formData.get('category') ?? '').trim() || null;
+  const grammage = String(formData.get('grammage') ?? '').trim() || null;
+  const matiere = String(formData.get('matiere') ?? '').trim() || null;
+  const packaging = String(formData.get('packaging') ?? '').trim() || null;
+  const quantityStr = String(formData.get('quantity') ?? '').trim();
+  const quantity = quantityStr ? parseInt(quantityStr, 10) : null;
+
+  const supabase = createAdminClient();
+
+  // Snapshot avant pour comparer.
+  const before = await loadRequest(requestId);
+
+  await supabase
+    .from('quote_requests')
+    .update({
+      product_type,
+      perso_level,
+      category,
+      grammage,
+      matiere,
+      packaging,
+      quantity,
+    })
+    .eq('id', requestId);
+
+  if (before.odoo_order_id) {
+    // Résout le nouveau variant. Si différent → unlink + recréation.
+    const wizardLike: WizardState = {
+      productType: product_type,
+      persoLevel: perso_level,
+      category,
+      grammage,
+      matiere,
+      packaging,
+      packagingId: packaging,
+      scenteur: null,
+    } as WizardState;
+    const resolved = resolveProductVariant(wizardLike);
+    if (!resolved) {
+      redirectBack(requestId, {
+        odooError:
+          "Nouvelle config produit non résolue côté Odoo — corrige et réessaie.",
+      });
+    }
+
+    const lineIds = await findOrderProductLines(before.odoo_order_id);
+    const existingLineId = lineIds[0];
+
+    if (!existingLineId) {
+      redirectBack(requestId, {
+        odooError:
+          "Aucune ligne produit trouvée sur le devis Odoo — recrée le devis.",
+      });
+    }
+
+    const beforeWizardLike: WizardState = {
+      productType: before.product_type,
+      persoLevel: before.perso_level,
+      category: before.category,
+      grammage: before.grammage,
+      matiere: before.matiere,
+      packaging: before.packaging,
+      packagingId: before.packaging,
+      scenteur: null,
+    } as WizardState;
+    const beforeResolved = resolveProductVariant(beforeWizardLike);
+
+    if (resolved!.variantId !== beforeResolved?.variantId) {
+      // Variant change → unlink l'ancienne ligne, recrée une nouvelle pour
+      // que Odoo déclenche les onchange (price_unit, tax_ids).
+      await unlinkOrderLine(existingLineId!);
+      await executeKw<number>('sale.order.line', 'create', [
+        {
+          order_id: before.odoo_order_id,
+          product_id: resolved!.variantId,
+          product_uom_qty: quantity ?? before.quantity ?? 1,
+        },
+      ]);
+    } else if (quantity && quantity !== before.quantity) {
+      // Même variant, juste la quantité change.
+      await updateOrderLine(existingLineId!, { quantity });
+    }
+  }
+
+  revalidatePath(`/admin/quotes/${requestId}`);
+  redirectBack(requestId);
 }

@@ -8,7 +8,11 @@ import {
   regenerateClientLink,
   sendQuoteToClient,
   syncFromOdoo,
+  updateBilling,
+  updateContact,
   updateInternalNotes,
+  updateProductConfig,
+  updateShipping,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
 import { resolveProductVariant } from '@/lib/odoo/products';
@@ -27,14 +31,28 @@ interface PageProps {
     odooError?: string;
     odooName?: string;
     vatRejected?: string;
+    edit?: string;
   }>;
 }
 
 export default async function QuoteRequestDetail({ params, searchParams }: PageProps) {
   const { id } = await params;
-  const { sent, emailOk, link, emailError, quote: quoteId, odooError, vatRejected } =
-    await searchParams;
+  const {
+    sent,
+    emailOk,
+    link,
+    emailError,
+    quote: quoteId,
+    odooError,
+    vatRejected,
+    edit,
+  } = await searchParams;
   const odooBaseUrl = (process.env.ODOO_URL ?? '').replace(/\/$/, '');
+  const editingContact = edit === 'contact';
+  const editingShipping = edit === 'shipping';
+  const editingBilling = edit === 'billing';
+  const editingConfig = edit === 'config';
+  const cancelHref = `/admin/quotes/${id}`;
 
   const supabase = createAdminClient();
 
@@ -140,33 +158,109 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,420px)] gap-6">
         {/* Left column — request data */}
         <div className="space-y-6 min-w-0">
-          <Card title="Contact">
-            <KV
-              label="Profil"
-              value={
-                request.company_name
-                  ? `Entreprise — ${request.company_name}`
-                  : 'Particulier'
-              }
-            />
-            <KV label="Nom" value={request.full_name ?? '—'} />
-            <KV
-              label="Email"
-              value={
-                <a
-                  href={`mailto:${request.email}`}
-                  className="text-gold-dark hover:underline"
+          <Card
+            title="Contact"
+            action={
+              editingContact ? (
+                <Link
+                  href={cancelHref}
+                  className="text-xs uppercase tracking-[0.06em] text-ink-soft hover:text-ink transition-colors"
                 >
-                  {request.email}
-                </a>
-              }
-            />
-            <KV label="Téléphone" value={request.phone ?? '—'} />
-            {request.siret && <KV label="SIRET" value={request.siret} />}
-            {request.vat_number && <KV label="N° TVA" value={request.vat_number} />}
+                  Annuler
+                </Link>
+              ) : (
+                <Link
+                  href={`${cancelHref}?edit=contact`}
+                  className="text-xs uppercase tracking-[0.06em] text-gold-dark hover:text-ink transition-colors"
+                >
+                  Modifier
+                </Link>
+              )
+            }
+          >
+            {editingContact ? (
+              <form action={updateContact} className="space-y-2">
+                <input type="hidden" name="requestId" value={request.id} />
+                <Field label="Société" name="company_name" defaultValue={request.company_name ?? ''} />
+                <Field label="Nom complet" name="full_name" defaultValue={request.full_name ?? ''} />
+                <Field label="Email" name="email" type="email" required defaultValue={request.email ?? ''} />
+                <Field label="Téléphone" name="phone" defaultValue={request.phone ?? ''} />
+                <Field label="SIRET" name="siret" defaultValue={request.siret ?? ''} />
+                <Field label="N° TVA" name="vat_number" defaultValue={request.vat_number ?? ''} />
+                <SaveButton>Enregistrer le contact</SaveButton>
+                {request.odoo_order_id && (
+                  <p className="text-[11px] text-ink-soft text-center pt-1">
+                    Synchronisé automatiquement avec le partner Odoo lié à {request.odoo_order_name}.
+                  </p>
+                )}
+              </form>
+            ) : (
+              <>
+                <KV
+                  label="Profil"
+                  value={
+                    request.company_name
+                      ? `Entreprise — ${request.company_name}`
+                      : 'Particulier'
+                  }
+                />
+                <KV label="Nom" value={request.full_name ?? '—'} />
+                <KV
+                  label="Email"
+                  value={
+                    <a
+                      href={`mailto:${request.email}`}
+                      className="text-gold-dark hover:underline"
+                    >
+                      {request.email}
+                    </a>
+                  }
+                />
+                <KV label="Téléphone" value={request.phone ?? '—'} />
+                {request.siret && <KV label="SIRET" value={request.siret} />}
+                {request.vat_number && <KV label="N° TVA" value={request.vat_number} />}
+              </>
+            )}
           </Card>
 
-          <Card title="Configuration produit">
+          <Card
+            title="Configuration produit"
+            action={
+              editingConfig ? (
+                <Link
+                  href={cancelHref}
+                  className="text-xs uppercase tracking-[0.06em] text-ink-soft hover:text-ink transition-colors"
+                >
+                  Annuler
+                </Link>
+              ) : (
+                <Link
+                  href={`${cancelHref}?edit=config`}
+                  className="text-xs uppercase tracking-[0.06em] text-gold-dark hover:text-ink transition-colors"
+                >
+                  Modifier
+                </Link>
+              )
+            }
+          >
+            {editingConfig ? (
+              <form action={updateProductConfig} className="space-y-2">
+                <input type="hidden" name="requestId" value={request.id} />
+                <Field label="Produit" name="product_type" defaultValue={request.product_type ?? ''} />
+                <Field label="Personnalisation" name="perso_level" defaultValue={request.perso_level ?? ''} />
+                <Field label="Catégorie" name="category" defaultValue={request.category ?? ''} />
+                <Field label="Grammage" name="grammage" defaultValue={request.grammage ?? ''} />
+                <Field label="Matière" name="matiere" defaultValue={request.matiere ?? ''} />
+                <Field label="Emballage" name="packaging" defaultValue={request.packaging ?? ''} />
+                <Field label="Quantité" name="quantity" type="number" step="1" min="1" defaultValue={request.quantity ?? ''} />
+                <SaveButton>Enregistrer la configuration</SaveButton>
+                {request.odoo_order_id && (
+                  <p className="text-[11px] text-ink-soft text-center pt-1">
+                    Si le variant change, la ligne Odoo est recréée (pour relancer les onchange prix/taxes).
+                  </p>
+                )}
+              </form>
+            ) : (
             <div className="space-y-2">
               <KV label="Produit" value={request.product_type} />
               {request.perso_level && (
@@ -276,6 +370,7 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                 </form>
               )}
             </div>
+            )}
           </Card>
 
           {(request.brief || request.file_url) && (
@@ -292,26 +387,168 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
             </Card>
           )}
 
-          <Card title="Livraison">
-            {request.shipping_address && (
+          <Card
+            title="Livraison"
+            action={
+              editingShipping ? (
+                <Link
+                  href={cancelHref}
+                  className="text-xs uppercase tracking-[0.06em] text-ink-soft hover:text-ink transition-colors"
+                >
+                  Annuler
+                </Link>
+              ) : (
+                <Link
+                  href={`${cancelHref}?edit=shipping`}
+                  className="text-xs uppercase tracking-[0.06em] text-gold-dark hover:text-ink transition-colors"
+                >
+                  Modifier
+                </Link>
+              )
+            }
+          >
+            {editingShipping ? (
+              <form action={updateShipping} className="space-y-2">
+                <input type="hidden" name="requestId" value={request.id} />
+                <Field
+                  label="Contact"
+                  name="contact"
+                  defaultValue={(request.shipping_address?.contact as string) ?? ''}
+                />
+                <Field
+                  label="Rue"
+                  name="street1"
+                  defaultValue={(request.shipping_address?.street1 as string) ?? ''}
+                />
+                <Field
+                  label="Complément"
+                  name="street2"
+                  defaultValue={(request.shipping_address?.street2 as string) ?? ''}
+                />
+                <Field
+                  label="Code postal"
+                  name="postal_code"
+                  defaultValue={(request.shipping_address?.postal_code as string) ?? ''}
+                />
+                <Field
+                  label="Ville"
+                  name="city"
+                  defaultValue={(request.shipping_address?.city as string) ?? ''}
+                />
+                <Field
+                  label="État/Région"
+                  name="state"
+                  defaultValue={(request.shipping_address?.state as string) ?? ''}
+                />
+                <Field
+                  label="Pays"
+                  name="country"
+                  defaultValue={(request.shipping_address?.country as string) ?? ''}
+                />
+                <Field
+                  label="Tél transporteur"
+                  name="carrier_phone"
+                  type="tel"
+                  defaultValue={(request.shipping_address?.carrier_phone as string) ?? ''}
+                />
+                <SaveButton>Enregistrer la livraison</SaveButton>
+                {request.odoo_order_id && (
+                  <p className="text-[11px] text-ink-soft text-center pt-1">
+                    Met à jour le contact delivery + le partner Odoo + la position fiscale.
+                  </p>
+                )}
+              </form>
+            ) : (
+              request.shipping_address && (
+                <KV
+                  label="Adresse"
+                  value={
+                    <pre className="whitespace-pre-wrap font-sans text-sm">
+                      {formatAddress(request.shipping_address)}
+                    </pre>
+                  }
+                />
+              )
+            )}
+          </Card>
+
+          <Card
+            title="Facturation"
+            action={
+              editingBilling ? (
+                <Link
+                  href={cancelHref}
+                  className="text-xs uppercase tracking-[0.06em] text-ink-soft hover:text-ink transition-colors"
+                >
+                  Annuler
+                </Link>
+              ) : (
+                <Link
+                  href={`${cancelHref}?edit=billing`}
+                  className="text-xs uppercase tracking-[0.06em] text-gold-dark hover:text-ink transition-colors"
+                >
+                  Modifier
+                </Link>
+              )
+            }
+          >
+            {editingBilling ? (
+              <form action={updateBilling} className="space-y-2">
+                <input type="hidden" name="requestId" value={request.id} />
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="same_as_shipping"
+                    value="1"
+                    defaultChecked={!request.billing_address}
+                  />
+                  Même adresse que la livraison
+                </label>
+                <Field
+                  label="Rue"
+                  name="street1"
+                  defaultValue={(request.billing_address?.street1 as string) ?? ''}
+                />
+                <Field
+                  label="Complément"
+                  name="street2"
+                  defaultValue={(request.billing_address?.street2 as string) ?? ''}
+                />
+                <Field
+                  label="Code postal"
+                  name="postal_code"
+                  defaultValue={(request.billing_address?.postal_code as string) ?? ''}
+                />
+                <Field
+                  label="Ville"
+                  name="city"
+                  defaultValue={(request.billing_address?.city as string) ?? ''}
+                />
+                <Field
+                  label="Pays"
+                  name="country"
+                  defaultValue={(request.billing_address?.country as string) ?? ''}
+                />
+                <SaveButton>Enregistrer la facturation</SaveButton>
+                {request.odoo_order_id && (
+                  <p className="text-[11px] text-ink-soft text-center pt-1">
+                    Crée ou met à jour le contact invoice Odoo et la position fiscale.
+                  </p>
+                )}
+              </form>
+            ) : request.billing_address ? (
               <KV
                 label="Adresse"
-                value={
-                  <pre className="whitespace-pre-wrap font-sans text-sm">
-                    {formatAddress(request.shipping_address)}
-                  </pre>
-                }
-              />
-            )}
-            {request.billing_address && (
-              <KV
-                label="Facturation différente"
                 value={
                   <pre className="whitespace-pre-wrap font-sans text-sm">
                     {formatAddress(request.billing_address)}
                   </pre>
                 }
               />
+            ) : (
+              <p className="text-sm text-ink-soft italic">
+                Identique à la livraison
+              </p>
             )}
           </Card>
 
@@ -431,18 +668,70 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
 
 function Card({
   title,
+  action,
   children,
 }: {
   title: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="bg-white rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] p-5">
-      <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark mb-3">
-        {title}
-      </h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
+          {title}
+        </h3>
+        {action}
+      </div>
       <dl className="space-y-2 text-sm">{children}</dl>
     </section>
+  );
+}
+
+function Field({
+  label,
+  name,
+  defaultValue,
+  type = 'text',
+  required = false,
+  step,
+  min,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string | number;
+  type?: 'text' | 'email' | 'number' | 'tel';
+  required?: boolean;
+  step?: string;
+  min?: string;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
+      <label htmlFor={name} className="text-xs uppercase tracking-[0.06em] text-ink-soft">
+        {label}
+      </label>
+      <input
+        id={name}
+        name={name}
+        type={type}
+        defaultValue={defaultValue ?? ''}
+        required={required}
+        step={step}
+        min={min}
+        className="qw-input"
+      />
+    </div>
+  );
+}
+
+function SaveButton({ children }: { children: React.ReactNode }) {
+  return (
+    <button
+      type="submit"
+      className="w-full mt-3 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+    >
+      {children}
+    </button>
   );
 }
 
