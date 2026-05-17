@@ -970,12 +970,19 @@ export async function attachDeliveryToOrder(
   //    Note : on confirme MÊME SI delivery_price=0 (port verbatim Python
   //    L.1670-1683 : "prix à renseigner manuellement"). La ligne existe
   //    et l'admin la complétera dans Odoo si besoin.
+  //
+  //    button_confirm retourne None côté Odoo → "Odoo: empty response"
+  //    côté notre client JSON-RPC. C'est l'équivalent du "cannot marshal
+  //    None" toléré par le script Python (L.1675-1678). Le wizard a déjà
+  //    fait son travail (ligne ajoutée à la sale.order), on ne bloque pas.
   try {
     await executeKw<unknown>('choose.delivery.carrier', 'button_confirm', [[wizardId]]);
   } catch (err) {
-    throw new Error(
-      `Impossible d'ajouter la ligne transport ${ctx} : ${(err as Error).message}`,
-    );
+    const msg = (err as Error).message ?? '';
+    if (!/empty response|cannot marshal None/i.test(msg)) {
+      throw new Error(`Impossible d'ajouter la ligne transport ${ctx} : ${msg}`);
+    }
+    // Sinon : confirmation déjà effective côté Odoo malgré le retour vide.
   }
 
   return { carrierId, carrierName, deliveryPrice };
