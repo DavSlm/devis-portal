@@ -15,6 +15,7 @@ import {
   updateShipping,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
+import { PendingOverlay, SubmitButton } from './SubmitButton';
 import { resolveProductVariant } from '@/lib/odoo/products';
 import type { WizardState } from '@/types/wizard';
 
@@ -344,12 +345,10 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
 
                   <form action={sendQuoteToClient}>
                     <input type="hidden" name="requestId" value={request.id} />
-                    <button
-                      type="submit"
-                      className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
-                    >
+                    <PendingOverlay message="Envoi du devis au client en cours…" />
+                    <SubmitButton pendingLabel="Envoi en cours…">
                       Envoyer le devis au client
-                    </button>
+                    </SubmitButton>
                     <p className="text-[11px] text-ink-soft text-center pt-1">
                       Snapshot du devis Odoo + magic link envoyé au client.
                     </p>
@@ -359,6 +358,7 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                 /* ── Étape 1 : pas encore créé dans Odoo ── */
                 <form action={generateOdooDraft} className="space-y-2 pt-2">
                   <input type="hidden" name="requestId" value={request.id} />
+                  <PendingOverlay message="Création du devis dans Odoo en cours…" />
 
                   <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
                     <label
@@ -379,12 +379,11 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full mt-3 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
-                  >
-                    Créer dans Odoo
-                  </button>
+                  <div className="mt-3">
+                    <SubmitButton pendingLabel="Création en cours…">
+                      Créer dans Odoo
+                    </SubmitButton>
+                  </div>
                   <p className="text-[11px] text-ink-soft text-center pt-1">
                     Crée la sale.order, attache le transport et le partner.
                     Le client n&apos;est PAS encore notifié — étape 2 ensuite.
