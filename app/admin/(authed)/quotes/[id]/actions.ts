@@ -570,6 +570,46 @@ async function getPartnerIdForOrder(orderId: number): Promise<number | null> {
   return Array.isArray(m2o) ? m2o[0] : null;
 }
 
+/**
+ * Cherche le sale.order Odoo lié à une quote_request via le pattern
+ * "Demande #<id-court>" sur client_order_ref. Backfill aussi
+ * `odoo_order_id` / `odoo_order_name` côté Supabase pour éviter de
+ * refaire le lookup à chaque modif future.
+ */
+async function backfillOdooOrderForRequest(
+  requestId: string,
+): Promise<{ orderId: number; orderName: string } | null> {
+  const ref = `Demande #${requestId.slice(0, 8)}`;
+  const rows = await executeKw<Array<{ id: number; name: string }>>(
+    'sale.order',
+    'search_read',
+    [[['client_order_ref', '=', ref]]],
+    { fields: ['id', 'name'], order: 'create_date desc', limit: 1 },
+  );
+  const order = rows[0];
+  if (!order) return null;
+
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({ odoo_order_id: order.id, odoo_order_name: order.name })
+    .eq('id', requestId);
+  return { orderId: order.id, orderName: order.name };
+}
+
+/**
+ * Résout l'order Odoo lié : utilise `odoo_order_id` s'il est setté,
+ * sinon tente un backfill via client_order_ref. Retourne null si rien
+ * ne match (= aucun devis Odoo n'a encore été créé pour cette demande).
+ */
+async function resolveOdooOrderId(
+  request: RequestWithOdoo,
+): Promise<number | null> {
+  if (request.odoo_order_id) return request.odoo_order_id;
+  const found = await backfillOdooOrderForRequest(request.id);
+  return found?.orderId ?? null;
+}
+
 function redirectBack(
   requestId: string,
   extra: Record<string, string> = {},
@@ -607,11 +647,12 @@ export async function updateContact(formData: FormData): Promise<void> {
     })
     .eq('id', requestId);
 
-  // Sync Odoo si un partner existe déjà.
+  // Sync Odoo si un devis est déjà lié (avec backfill auto si besoin).
   const request = await loadRequest(requestId);
+  const odooOrderId = await resolveOdooOrderId(request);
   let vatRejected = false;
-  if (request.odoo_order_id) {
-    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+  if (odooOrderId) {
+    const partnerId = await getPartnerIdForOrder(odooOrderId);
     if (partnerId) {
       const isCompany = !!company_name;
       const result = await updatePartner(partnerId, {
@@ -653,8 +694,9 @@ export async function updateShipping(formData: FormData): Promise<void> {
     .eq('id', requestId);
 
   const request = await loadRequest(requestId);
-  if (request.odoo_order_id) {
-    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+  const odooOrderId = await resolveOdooOrderId(request);
+  if (odooOrderId) {
+    const partnerId = await getPartnerIdForOrder(odooOrderId);
     if (partnerId) {
       // Update main partner (street/zip/city/country dupliqués côté Python).
       await updatePartner(partnerId, {
@@ -684,7 +726,7 @@ export async function updateShipping(formData: FormData): Promise<void> {
       );
       const hasVat = !!(request.vat_number && request.vat_number.trim());
       const fpId = getFiscalPositionId(billingIso, deliveryIso, hasVat);
-      await updateSaleOrder(request.odoo_order_id, { fiscalPositionId: fpId });
+      await updateSaleOrder(odooOrderId, { fiscalPositionId: fpId });
     }
   }
 
@@ -716,8 +758,9 @@ export async function updateBilling(formData: FormData): Promise<void> {
     .eq('id', requestId);
 
   const request = await loadRequest(requestId);
-  if (request.odoo_order_id && billing) {
-    const partnerId = await getPartnerIdForOrder(request.odoo_order_id);
+  const odooOrderId = await resolveOdooOrderId(request);
+  if (odooOrderId && billing) {
+    const partnerId = await getPartnerIdForOrder(odooOrderId);
     if (partnerId) {
       await upsertChildAddress(partnerId, 'invoice', {
         street: billing.street1,
@@ -736,7 +779,7 @@ export async function updateBilling(formData: FormData): Promise<void> {
       const billingIso = countryNameToIso(billing.country ?? deliveryIso);
       const hasVat = !!(request.vat_number && request.vat_number.trim());
       const fpId = getFiscalPositionId(billingIso, deliveryIso, hasVat);
-      await updateSaleOrder(request.odoo_order_id, { fiscalPositionId: fpId });
+      await updateSaleOrder(odooOrderId, { fiscalPositionId: fpId });
     }
   }
 
@@ -775,7 +818,8 @@ export async function updateProductConfig(formData: FormData): Promise<void> {
     })
     .eq('id', requestId);
 
-  if (before.odoo_order_id) {
+  const odooOrderId = await resolveOdooOrderId(before);
+  if (odooOrderId) {
     // Résout le nouveau variant. Si différent → unlink + recréation.
     const wizardLike: WizardState = {
       productType: product_type,
@@ -795,7 +839,7 @@ export async function updateProductConfig(formData: FormData): Promise<void> {
       });
     }
 
-    const lineIds = await findOrderProductLines(before.odoo_order_id);
+    const lineIds = await findOrderProductLines(odooOrderId);
     const existingLineId = lineIds[0];
 
     if (!existingLineId) {
@@ -823,7 +867,7 @@ export async function updateProductConfig(formData: FormData): Promise<void> {
       await unlinkOrderLine(existingLineId!);
       await executeKw<number>('sale.order.line', 'create', [
         {
-          order_id: before.odoo_order_id,
+          order_id: odooOrderId,
           product_id: resolved!.variantId,
           product_uom_qty: quantity ?? before.quantity ?? 1,
         },
