@@ -7,6 +7,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
 import { createOdooDraftFromRequest } from '@/lib/odoo/createDraft';
+import { variantIdFromWizardKey } from '@/lib/odoo/products';
 
 // =====================================================
 // Sprint 4 — Odoo-based flow
@@ -121,21 +122,27 @@ export async function createAndSendQuote(formData: FormData): Promise<void> {
  * (creating the partner if needed), then immediately sync it back to our
  * DB and send the magic link to the client.
  *
- *   form fields: requestId, odooProductId, quantity
+ *   form fields: requestId, productKey, quantity
+ *
+ * productKey is a wizard-style identifier (e.g. 'neutre|15g|blanc|the blanc'),
+ * resolved to an Odoo variant_id internally. If empty, the orchestrator
+ * auto-picks from the wizard data.
  */
 export async function generateOdooDraft(formData: FormData): Promise<void> {
   const requestId = String(formData.get('requestId') ?? '');
-  const productId = parseInt(String(formData.get('odooProductId') ?? '0'), 10);
+  const productKey = String(formData.get('productKey') ?? '').trim();
   const quantity = parseInt(String(formData.get('quantity') ?? '0'), 10);
 
   if (!requestId) throw new Error('requestId manquant');
   if (!quantity || quantity <= 0) throw new Error('Quantité invalide');
 
+  const productId = productKey ? variantIdFromWizardKey(productKey) : null;
+
   let result;
   try {
     result = await createOdooDraftFromRequest({
       requestId,
-      productId: productId > 0 ? productId : undefined, // optionnel : si vide, auto-résolution depuis le wizard
+      productId: productId ?? undefined, // si non résolu, auto-résolution depuis le wizard
       quantity,
     });
   } catch (err) {

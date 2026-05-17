@@ -71,6 +71,122 @@ const FULL: Record<string, number> = {
 // ---- Plateaux ----
 const PLATEAUX_VARIANT_ID = 1014; // PF perso / AREV (ajuster si SKU réel disponible)
 
+
+// =====================================================
+// Wizard-style options for the admin "Choose product" dropdown.
+// The admin sees friendly labels — never Odoo product names —
+// and we map to the Odoo variant_id internally.
+// =====================================================
+
+export type WizardProductGroup =
+  | 'Neutre'
+  | 'Semi-perso'
+  | 'Full perso'
+  | 'Plateaux';
+
+export interface WizardProductOption {
+  key: string;
+  label: string;
+  group: WizardProductGroup;
+  variantId: number;
+}
+
+function labelCouleur(c: string): string {
+  switch (c) {
+    case 'blanc': return 'Blanc';
+    case 'noir': return 'Noir';
+    case 'silver': return 'Argent';
+    case 'bronze': return 'Bronze';
+    case 'transparent': return 'Transparent';
+    case 'ecru': return 'Écru bambou';
+    default: return c;
+  }
+}
+
+function labelParfum(p: string): string {
+  switch (p) {
+    case 'the blanc': return 'Thé Blanc';
+    case 'the vert': return 'Thé Vert';
+    case 'fleur oranger': return "Fleur d'Oranger";
+    case 'sans': return 'Sans parfum';
+    default: return p;
+  }
+}
+
+function labelServiette(s: string): string {
+  return s === 'bambou' ? 'Bambou' : 'Coton';
+}
+
+function buildWizardOptions(): WizardProductOption[] {
+  const out: WizardProductOption[] = [];
+
+  // Neutre
+  for (const [key, variantId] of Object.entries(NEUTRE)) {
+    const [g, c, p] = key.split('|');
+    out.push({
+      key: `neutre|${g}|${c}|${p}`,
+      label: `${g} · ${labelCouleur(c)} · ${labelParfum(p)}`,
+      group: 'Neutre',
+      variantId,
+    });
+  }
+
+  // Semi
+  for (const [key, variantId] of Object.entries(SEMI)) {
+    const [g, c, p] = key.split('|');
+    out.push({
+      key: `semi|${g}|${c}|${p}`,
+      label: `${g} · ${labelCouleur(c)} · ${labelParfum(p)}`,
+      group: 'Semi-perso',
+      variantId,
+    });
+  }
+
+  // Full
+  for (const [key, variantId] of Object.entries(FULL)) {
+    const [g, s, p] = key.split('|');
+    out.push({
+      key: `full|${g}|${s}|${p}`,
+      label: `${g} · ${labelServiette(s)} · ${labelParfum(p)}`,
+      group: 'Full perso',
+      variantId,
+    });
+  }
+
+  out.push({
+    key: 'plateaux',
+    label: 'Plateaux 1×10 — Serviettes sèches',
+    group: 'Plateaux',
+    variantId: PLATEAUX_VARIANT_ID,
+  });
+
+  return out;
+}
+
+export const WIZARD_PRODUCT_OPTIONS: ReadonlyArray<WizardProductOption> =
+  buildWizardOptions();
+
+export function groupedWizardOptions(): Record<
+  WizardProductGroup,
+  WizardProductOption[]
+> {
+  const groups: Record<WizardProductGroup, WizardProductOption[]> = {
+    Neutre: [],
+    'Semi-perso': [],
+    'Full perso': [],
+    Plateaux: [],
+  };
+  for (const o of WIZARD_PRODUCT_OPTIONS) groups[o.group].push(o);
+  return groups;
+}
+
+/** Resolve the Odoo product.product variant_id from a wizard option key
+ *  (e.g. 'neutre|15g|blanc|the blanc'). */
+export function variantIdFromWizardKey(key: string): number | null {
+  const found = WIZARD_PRODUCT_OPTIONS.find((o) => o.key === key);
+  return found?.variantId ?? null;
+}
+
 // =====================================================
 // Inference helpers — same heuristics as product_map.py
 // =====================================================

@@ -129,26 +129,15 @@ export async function createOdooDraftFromRequest(
   validity.setDate(validity.getDate() + 30);
   const validityDate = validity.toISOString().slice(0, 10);
 
-  // Description : prefer caller value, else assemble from wizard fields.
-  const description =
-    input.description ??
-    [
-      request.product_type,
-      request.perso_level,
-      request.grammage,
-      request.matiere,
-      request.packaging,
-    ]
-      .filter(Boolean)
-      .join(' · ');
-
+  // NOTE : on N'INJECTE PAS de description sur la ligne. Odoo doit utiliser
+  // le nom natif du produit (comme le script Python). Toute personnalisation
+  // de la description serait une dérive non voulue.
   const order = await createSaleOrder({
     partnerId: partner.id,
     lines: [
       {
         productId: productResolution.variantId,
         quantity: input.quantity,
-        description: description || undefined,
       },
     ],
     validityDate,

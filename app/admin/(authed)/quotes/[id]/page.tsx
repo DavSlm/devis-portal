@@ -10,7 +10,13 @@ import {
   updateInternalNotes,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
-import { listOshiboriProducts, type OdooProductLite } from '@/lib/odoo/client';
+import {
+  WIZARD_PRODUCT_OPTIONS,
+  groupedWizardOptions,
+  resolveProductVariant,
+  type WizardProductGroup,
+} from '@/lib/odoo/products';
+import type { WizardState } from '@/types/wizard';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,18 +51,27 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
 
   if (error || !request) notFound();
 
-  // Fetch Odoo products (catalog cached for the request lifetime).
-  // Pre-filter by grammage hint for a more relevant default selection.
-  const grammage = (request.grammage as string | null) ?? '';
-  const hint = grammage.startsWith('15') ? '15' : grammage.startsWith('10') ? '10' : grammage.startsWith('6') ? '6' : '';
-  let odooProducts: OdooProductLite[] = [];
-  let odooProductsError: string | null = null;
-  try {
-    odooProducts = await listOshiboriProducts(hint || undefined);
-  } catch (err) {
-    odooProductsError = (err as Error).message;
-  }
-  const defaultProductId = pickSuggestedProduct(request, odooProducts);
+  // Static catalogue of wizard-style options (Neutre / Semi-perso / Full perso /
+  // Plateaux) mapped to Odoo variant_id. We never expose Odoo's internal SKUs
+  // here — the admin picks from the same vocabulary as the wizard.
+  const wizardGroups = groupedWizardOptions();
+
+  // Suggested default = what the orchestrator would pick automatically from
+  // the wizard data. The admin can override by picking another row.
+  const wizardLike: WizardState = {
+    ...request,
+    productType: request.product_type,
+    persoLevel: request.perso_level,
+    grammage: request.grammage,
+    matiere: request.matiere,
+    packaging: request.packaging,
+    packagingId: request.packaging,
+    scenteur: null,
+  } as WizardState;
+  const suggested = resolveProductVariant(wizardLike);
+  const defaultProductKey = suggested
+    ? WIZARD_PRODUCT_OPTIONS.find((o) => o.variantId === suggested.variantId)?.key
+    : undefined;
 
   return (
     <div className="space-y-6">
@@ -284,46 +299,39 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
               Choisis le produit, ajuste la quantité — on s&apos;occupe du reste
               (client, position fiscale, transport, TVA).
             </p>
-            {odooProductsError && (
-              <p
-                className="text-xs mb-3 p-2 rounded"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.08)',
-                  color: 'var(--qw-error)',
-                }}
-              >
-                Impossible de charger les produits Odoo : {odooProductsError}
-              </p>
-            )}
-            {!odooProductsError && (
-              <form action={generateOdooDraft} className="space-y-3">
-                <input type="hidden" name="requestId" value={request.id} />
+            <form action={generateOdooDraft} className="space-y-3">
+              <input type="hidden" name="requestId" value={request.id} />
 
-                <label className="block">
-                  <span className="qw-label">Produit Odoo</span>
-                  <select
-                    name="odooProductId"
-                    required
-                    className="qw-input"
-                    defaultValue={defaultProductId ?? ''}
-                  >
-                    <option value="">— Sélectionner —</option>
-                    {odooProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.default_code ? `[${p.default_code}] ` : ''}
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  {grammage && (
-                    <span className="block mt-1 text-[11px] text-ink-soft">
-                      Liste filtrée sur {grammage} ·{' '}
-                      <span className="text-gold-dark">
-                        {odooProducts.length} produit{odooProducts.length > 1 ? 's' : ''}
-                      </span>
-                    </span>
+              <label className="block">
+                <span className="qw-label">Produit</span>
+                <select
+                  name="productKey"
+                  required
+                  className="qw-input"
+                  defaultValue={defaultProductKey ?? ''}
+                >
+                  <option value="">— Sélectionner —</option>
+                  {(['Neutre', 'Semi-perso', 'Full perso', 'Plateaux'] as WizardProductGroup[]).map(
+                    (group) => {
+                      const opts = wizardGroups[group];
+                      if (opts.length === 0) return null;
+                      return (
+                        <optgroup key={group} label={group}>
+                          {opts.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    },
                   )}
-                </label>
+                </select>
+                <span className="block mt-1 text-[11px] text-ink-soft">
+                  Sélection basée sur la configuration du wizard. Le produit Odoo
+                  correspondant est résolu automatiquement.
+                </span>
+              </label>
 
                 <label className="block">
                   <span className="qw-label">Quantité</span>
@@ -344,12 +352,11 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
                 >
                   Créer dans Odoo et envoyer au client
                 </button>
-                <p className="text-[11px] text-ink-soft text-center">
-                  Crée un sale.order draft, applique transport &amp; TVA selon Odoo,
-                  envoie automatiquement le magic link au client.
-                </p>
-              </form>
-            )}
+              <p className="text-[11px] text-ink-soft text-center">
+                Crée un sale.order draft, applique transport &amp; TVA selon Odoo,
+                envoie automatiquement le magic link au client.
+              </p>
+            </form>
           </Card>
 
           <Card title="Lier à un devis Odoo existant">
@@ -454,54 +461,3 @@ function formatAddress(addr: Address | null): string {
   return s;
 }
 
-interface QuoteRequestRow {
-  packaging?: string | null;
-  packaging_id?: string | null;
-  perso_level?: string | null;
-  grammage?: string | null;
-}
-
-/**
- * Pick the most likely Odoo product for this request, based on packaging
- * keywords (white/blanc, noir, argent, or, etc.) and perso level.
- *
- * Returns the product id to pre-select in the dropdown, or null if no
- * confident match.
- */
-function pickSuggestedProduct(
-  request: QuoteRequestRow,
-  products: OdooProductLite[],
-): number | null {
-  if (!products.length) return null;
-
-  const packaging = (request.packaging ?? '').toLowerCase();
-  const perso = request.perso_level ?? '';
-  const isSemi = perso === 'Semi-perso';
-  const isNeutre = perso === 'Neutre';
-
-  // Match a single-letter color code in the default_code: W=white, OR=or,
-  // G=argent, OW=ecru bambou, CLEAR=transparent.
-  const colorCode = (() => {
-    if (packaging.includes('blanc') || packaging.includes('white')) return 'W';
-    if (packaging.includes('argent') || packaging.includes('grey')) return 'G';
-    if (packaging.includes('transparent') || packaging.includes('clear')) return 'CLEAR';
-    if (packaging.includes('bronze')) return 'OR';
-    if (packaging.includes('ecru') || packaging.includes('bambou')) return 'OW';
-    if (packaging.includes('noir') || packaging.includes('black')) return 'N';
-    return null;
-  })();
-
-  const wantType = isSemi ? 'BLANK' : isNeutre ? 'NEUTRE' : null;
-
-  // Prefer products whose default_code matches both the color and the perso type.
-  for (const p of products) {
-    if (!p.default_code) continue;
-    const code = p.default_code.toUpperCase();
-    if (wantType && !code.includes(wantType)) continue;
-    if (colorCode && !code.includes(colorCode)) continue;
-    return p.id;
-  }
-
-  // Fallback : first matching grammage product
-  return products[0]?.id ?? null;
-}
