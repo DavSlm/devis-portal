@@ -7,7 +7,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { formatEuro } from '@/lib/pricing';
 import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
 import { createOdooDraftFromRequest } from '@/lib/odoo/createDraft';
-import { variantIdFromWizardKey } from '@/lib/odoo/products';
 
 // =====================================================
 // Sprint 4 — Odoo-based flow
@@ -122,27 +121,32 @@ export async function createAndSendQuote(formData: FormData): Promise<void> {
  * (creating the partner if needed), then immediately sync it back to our
  * DB and send the magic link to the client.
  *
- *   form fields: requestId, productKey, quantity
+ *   form fields: requestId, quantity
  *
- * productKey is a wizard-style identifier (e.g. 'neutre|15g|blanc|the blanc'),
- * resolved to an Odoo variant_id internally. If empty, the orchestrator
- * auto-picks from the wizard data.
+ * Le produit est résolu automatiquement depuis la configuration du wizard
+ * (perso_level / grammage / matiere / packaging) — même logique que le
+ * script Python gmail_to_odoo. Pas de sélection manuelle côté admin.
+ *
+ * La quantité saisie est persistée sur quote_requests pour rester cohérente
+ * avec ce qui a été envoyé à Odoo.
  */
 export async function generateOdooDraft(formData: FormData): Promise<void> {
   const requestId = String(formData.get('requestId') ?? '');
-  const productKey = String(formData.get('productKey') ?? '').trim();
   const quantity = parseInt(String(formData.get('quantity') ?? '0'), 10);
 
   if (!requestId) throw new Error('requestId manquant');
   if (!quantity || quantity <= 0) throw new Error('Quantité invalide');
 
-  const productId = productKey ? variantIdFromWizardKey(productKey) : null;
+  const supabase = createAdminClient();
+  await supabase
+    .from('quote_requests')
+    .update({ quantity })
+    .eq('id', requestId);
 
   let result;
   try {
     result = await createOdooDraftFromRequest({
       requestId,
-      productId: productId ?? undefined, // si non résolu, auto-résolution depuis le wizard
       quantity,
     });
   } catch (err) {

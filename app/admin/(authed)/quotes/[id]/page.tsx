@@ -10,12 +10,7 @@ import {
   updateInternalNotes,
 } from './actions';
 import { LinkPanel } from './LinkPanel';
-import {
-  WIZARD_PRODUCT_OPTIONS,
-  groupedWizardOptions,
-  resolveProductVariant,
-  type WizardProductGroup,
-} from '@/lib/odoo/products';
+import { resolveProductVariant } from '@/lib/odoo/products';
 import type { WizardState } from '@/types/wizard';
 
 export const dynamic = 'force-dynamic';
@@ -51,13 +46,9 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
 
   if (error || !request) notFound();
 
-  // Static catalogue of wizard-style options (Neutre / Semi-perso / Full perso /
-  // Plateaux) mapped to Odoo variant_id. We never expose Odoo's internal SKUs
-  // here — the admin picks from the same vocabulary as the wizard.
-  const wizardGroups = groupedWizardOptions();
-
-  // Suggested default = what the orchestrator would pick automatically from
-  // the wizard data. The admin can override by picking another row.
+  // Produit Odoo auto-résolu depuis la configuration du wizard — même règles
+  // que le script Python gmail_to_odoo. Affiché pour info, jamais modifiable
+  // depuis cette UI (modifier la demande si la config est fausse).
   const wizardLike: WizardState = {
     ...request,
     productType: request.product_type,
@@ -69,9 +60,6 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
     scenteur: null,
   } as WizardState;
   const suggested = resolveProductVariant(wizardLike);
-  const defaultProductKey = suggested
-    ? WIZARD_PRODUCT_OPTIONS.find((o) => o.variantId === suggested.variantId)?.key
-    : undefined;
 
   return (
     <div className="space-y-6">
@@ -157,32 +145,70 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
           </Card>
 
           <Card title="Configuration produit">
-            <KV label="Produit" value={request.product_type} />
-            {request.perso_level && (
-              <KV label="Personnalisation" value={request.perso_level} />
-            )}
-            {request.category && <KV label="Catégorie" value={request.category} />}
-            {request.grammage && <KV label="Grammage" value={request.grammage} />}
-            {request.matiere && <KV label="Matière" value={request.matiere} />}
-            {request.packaging && <KV label="Emballage" value={request.packaging} />}
-            <KV
-              label="Quantité"
-              value={
-                request.quantity ? request.quantity.toLocaleString('fr-FR') : '—'
-              }
-            />
-            <KV
-              label="Estimation HT"
-              value={
-                request.estimated_total
-                  ? `${formatEuro(request.estimated_total)} (${
-                      request.estimated_unit_price
-                        ? formatEuro(request.estimated_unit_price) + '/u'
-                        : '—'
-                    })`
-                  : '—'
-              }
-            />
+            <form action={generateOdooDraft} className="space-y-2">
+              <input type="hidden" name="requestId" value={request.id} />
+
+              <KV label="Produit" value={request.product_type} />
+              {request.perso_level && (
+                <KV label="Personnalisation" value={request.perso_level} />
+              )}
+              {request.category && <KV label="Catégorie" value={request.category} />}
+              {request.grammage && <KV label="Grammage" value={request.grammage} />}
+              {request.matiere && <KV label="Matière" value={request.matiere} />}
+              {request.packaging && <KV label="Emballage" value={request.packaging} />}
+
+              <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
+                <label
+                  htmlFor="quantity"
+                  className="text-xs uppercase tracking-[0.06em] text-ink-soft"
+                >
+                  Quantité
+                </label>
+                <input
+                  id="quantity"
+                  type="number"
+                  name="quantity"
+                  step="1"
+                  min="1"
+                  required
+                  className="qw-input"
+                  defaultValue={request.quantity ?? ''}
+                />
+              </div>
+
+              <KV
+                label="Estimation HT"
+                value={
+                  request.estimated_total
+                    ? `${formatEuro(request.estimated_total)} (${
+                        request.estimated_unit_price
+                          ? formatEuro(request.estimated_unit_price) + '/u'
+                          : '—'
+                      })`
+                    : '—'
+                }
+              />
+
+              {suggested && (
+                <p className="text-[11px] text-ink-soft pt-2">
+                  → Produit Odoo : <code className="text-ink">{suggested.description}</code>
+                  {suggested.fallback && (
+                    <span className="text-[var(--qw-error)] ml-1">(fallback)</span>
+                  )}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full mt-3 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
+              >
+                Créer dans Odoo et envoyer au client
+              </button>
+              <p className="text-[11px] text-ink-soft text-center pt-1">
+                Le produit Odoo est résolu automatiquement depuis cette configuration —
+                position fiscale, transport &amp; TVA appliqués par Odoo.
+              </p>
+            </form>
           </Card>
 
           {(request.brief || request.file_url) && (
@@ -293,72 +319,6 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
 
         {/* Right column — Odoo actions */}
         <aside className="lg:sticky lg:top-6 h-fit space-y-6">
-          <Card title="Générer le devis sur Odoo">
-            <p className="text-xs text-ink-soft mb-4">
-              Crée un brouillon directement dans Odoo à partir de cette demande.
-              Choisis le produit, ajuste la quantité — on s&apos;occupe du reste
-              (client, position fiscale, transport, TVA).
-            </p>
-            <form action={generateOdooDraft} className="space-y-3">
-              <input type="hidden" name="requestId" value={request.id} />
-
-              <label className="block">
-                <span className="qw-label">Produit</span>
-                <select
-                  name="productKey"
-                  required
-                  className="qw-input"
-                  defaultValue={defaultProductKey ?? ''}
-                >
-                  <option value="">— Sélectionner —</option>
-                  {(['Neutre', 'Semi-perso', 'Full perso', 'Plateaux'] as WizardProductGroup[]).map(
-                    (group) => {
-                      const opts = wizardGroups[group];
-                      if (opts.length === 0) return null;
-                      return (
-                        <optgroup key={group} label={group}>
-                          {opts.map((o) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      );
-                    },
-                  )}
-                </select>
-                <span className="block mt-1 text-[11px] text-ink-soft">
-                  Sélection basée sur la configuration du wizard. Le produit Odoo
-                  correspondant est résolu automatiquement.
-                </span>
-              </label>
-
-                <label className="block">
-                  <span className="qw-label">Quantité</span>
-                  <input
-                    type="number"
-                    name="quantity"
-                    step="1"
-                    min="1"
-                    required
-                    className="qw-input"
-                    defaultValue={request.quantity ?? ''}
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  className="w-full py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] transition-all"
-                >
-                  Créer dans Odoo et envoyer au client
-                </button>
-              <p className="text-[11px] text-ink-soft text-center">
-                Crée un sale.order draft, applique transport &amp; TVA selon Odoo,
-                envoie automatiquement le magic link au client.
-              </p>
-            </form>
-          </Card>
-
           <Card title="Lier à un devis Odoo existant">
             <p className="text-xs text-ink-soft mb-4">
               Si tu as déjà créé le devis dans Odoo (ou via ton automatisation Python),
