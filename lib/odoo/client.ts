@@ -228,6 +228,17 @@ export function pdfUrl(saleOrderId: number, token: string): string {
   return `${portalUrl(saleOrderId, token)}&report_type=pdf&download=true`;
 }
 
+/**
+ * URL « mail view » Odoo : la vue HTML standard que Odoo envoie aux
+ * clients dans les emails de partage. Format :
+ *   /mail/view?model=sale.order&res_id=<id>&access_token=<token>
+ * Tokenisée donc accessible sans login client.
+ */
+export function mailViewUrl(saleOrderId: number, token: string): string {
+  const env = getEnv();
+  return `${env.url.replace(/\/$/, '')}/mail/view?model=sale.order&res_id=${saleOrderId}&access_token=${token}`;
+}
+
 // =====================================================
 // Partners (res.partner) — port verbatim de gmail_to_odoo.find_or_create_partner
 // =====================================================
@@ -982,6 +993,7 @@ export interface OdooSaleSnapshot {
   accessToken: string;
   portalUrl: string;
   pdfUrl: string;
+  mailViewUrl: string;
   fetchedAt: string;
 }
 
@@ -1005,6 +1017,7 @@ export async function fetchSaleOrderSnapshot(
     accessToken,
     portalUrl: portalUrl(order.id, accessToken),
     pdfUrl: pdfUrl(order.id, accessToken),
+    mailViewUrl: mailViewUrl(order.id, accessToken),
     fetchedAt: new Date().toISOString(),
   };
 }

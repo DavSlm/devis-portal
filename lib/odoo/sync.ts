@@ -13,7 +13,11 @@ import {
   type OdooSaleSnapshot,
 } from './client';
 
-const FROM_ADDRESS = 'Devis Oshibori <onboarding@resend.dev>';
+// Expéditeur officiel — exige que le domaine oshibori-concept.com soit
+// vérifié dans Resend (Dashboard → Domains). Sinon Resend renverra une
+// erreur "domain not verified" et l'email ne partira pas.
+const FROM_ADDRESS = 'David Salama <david@oshibori-concept.com>';
+const REPLY_TO = 'david@oshibori-concept.com';
 
 // Fichier RIB joint à chaque devis envoyé. À placer dans public/documents/
 // (deploy avec le bundle Next.js). Si absent, l'email part avec seulement
@@ -174,7 +178,8 @@ export async function syncOdooOrderToQuote({
     );
   }
 
-  // Send via Resend with PDF + RIB attached. No more OTP code in the body.
+  // Send via Resend with PDF + RIB attached, body with line-items recap
+  // and direct Odoo mail-view link (no portal navigation needed).
   let emailSent = false;
   let emailError: string | undefined;
   if (process.env.RESEND_API_KEY) {
@@ -182,14 +187,15 @@ export async function syncOdooOrderToQuote({
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: FROM_ADDRESS,
+        replyTo: REPLY_TO,
         to: request.email,
         subject: `Votre devis ${quote.quote_number} — Oshibori Concept`,
         html: renderClientEmail({
-          customerName: request.full_name ?? '',
-          companyName: request.company_name ?? '',
           quoteNumber: quote.quote_number,
           totalHt: snapshot.order.amount_untaxed,
-          hasRib: attachments.length > 1,
+          productLines: snapshot.productLines,
+          deliveryLine: snapshot.deliveryLine,
+          odooLink: snapshot.mailViewUrl,
         }),
         attachments,
       });
@@ -242,59 +248,128 @@ function stripOdooLine(l: OdooSaleOrderLine) {
 // =====================================================
 
 interface ClientEmailArgs {
-  customerName: string;
-  companyName: string;
   quoteNumber: string;
   totalHt: number;
-  hasRib: boolean;
+  productLines: OdooSaleOrderLine[];
+  deliveryLine: OdooSaleOrderLine | null;
+  odooLink: string;
+}
+
+function formatEuroFr(n: number): string {
+  return `${n.toFixed(2).replace('.', ',')} €`;
+}
+
+function formatQty(n: number): string {
+  return Number.isInteger(n)
+    ? n.toLocaleString('fr-FR')
+    : n.toLocaleString('fr-FR', { minimumFractionDigits: 2 });
+}
+
+function renderRecapTable(
+  productLines: OdooSaleOrderLine[],
+  deliveryLine: OdooSaleOrderLine | null,
+): string {
+  const rows = productLines.map((l) => {
+    const productName = Array.isArray(l.product_id) ? l.product_id[1] : '—';
+    return `
+      <tr>
+        <td style="padding: 8px 12px 8px 0; border-bottom: 1px solid #eee; vertical-align: top;">
+          <div style="font-size: 13px; color: #252525; white-space: pre-wrap;">${escapeHtml(productName)}</div>
+        </td>
+        <td style="padding: 8px 0; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
+          <div style="font-size: 13px; color: #252525;">${escapeHtml(formatQty(l.product_uom_qty))}</div>
+          <div style="font-size: 11px; color: #888;">${escapeHtml(formatEuroFr(l.price_unit))} / u</div>
+        </td>
+        <td style="padding: 8px 0 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
+          <div style="font-size: 13px; color: #252525; font-weight: 600;">${escapeHtml(formatEuroFr(l.price_subtotal))}</div>
+        </td>
+      </tr>`;
+  }).join('');
+  const deliveryRow = deliveryLine
+    ? `
+      <tr>
+        <td style="padding: 8px 12px 8px 0; border-bottom: 1px solid #eee; vertical-align: top;">
+          <div style="font-size: 13px; color: #888; font-style: italic;">Transport</div>
+        </td>
+        <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right;"></td>
+        <td style="padding: 8px 0 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
+          <div style="font-size: 13px; color: #252525;">${escapeHtml(formatEuroFr(deliveryLine.price_subtotal))}</div>
+        </td>
+      </tr>`
+    : '';
+  return `
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+      <thead>
+        <tr>
+          <th style="text-align: left; padding: 6px 12px 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Produit</th>
+          <th style="text-align: right; padding: 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Quantité</th>
+          <th style="text-align: right; padding: 6px 0 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Sous-total</th>
+        </tr>
+      </thead>
+      <tbody>${rows}${deliveryRow}</tbody>
+    </table>`;
 }
 
 function renderClientEmail({
-  customerName,
-  companyName,
   quoteNumber,
   totalHt,
-  hasRib,
+  productLines,
+  deliveryLine,
+  odooLink,
 }: ClientEmailArgs): string {
-  const greet = customerName ? `Bonjour ${escapeHtml(customerName)},` : 'Bonjour,';
-  const co = companyName ? ` (${escapeHtml(companyName)})` : '';
-  const totalLabel = `${totalHt.toFixed(2).replace('.', ',')} €`;
-  const attachmentLine = hasRib
-    ? "Veuillez trouver, en pièce jointe, votre devis ainsi que le RIB associé."
-    : "Veuillez trouver, en pièce jointe, votre devis.";
+  const totalLabel = formatEuroFr(totalHt);
   return `
-<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #252525;">
+<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; color: #252525;">
   <div style="text-align: center; margin-bottom: 24px;">
     <img src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png" alt="Oshibori Concept" style="height: 48px; width: auto;">
   </div>
-  <h1 style="font-size: 20px; font-weight: 600; margin: 0 0 16px; color: #252525; text-align: center;">
-    Votre devis est prêt
-  </h1>
-  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">${greet}</p>
+
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">Bonjour,</p>
+
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">
-    Merci pour votre demande${co}. ${attachmentLine}
+    Merci pour votre demande de devis et l&apos;intérêt porté pour nos produits.
+  </p>
+
+  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 8px;">
+    Veuillez trouver en pièce jointe le devis (ou cliquez sur le bouton ci-dessous pour le consulter en ligne).
+  </p>
+
+  <div style="text-align: center; margin: 20px 0;">
+    <a href="${escapeHtml(odooLink)}" style="display: inline-block; padding: 12px 28px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
+      Consulter le devis ${escapeHtml(quoteNumber)}
+    </a>
+  </div>
+
+  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600; margin: 24px 0 8px;">
+    Rappel des produits et quantités
+  </div>
+  ${renderRecapTable(productLines, deliveryLine)}
+
+  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
+      <div>
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600;">Référence</div>
+        <div style="font-size: 14px; font-weight: 600; color: #252525; font-family: monospace;">${escapeHtml(quoteNumber)}</div>
+      </div>
+      <div style="text-align: right;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600;">Total HT</div>
+        <div style="font-size: 18px; font-weight: 600; color: #252525;">${totalLabel}</div>
+      </div>
+    </div>
+  </div>
+
+  <p style="font-size: 14px; line-height: 1.6; margin: 16px 0 8px;">
+    Je reste à votre disposition si vous avez des questions.
   </p>
   <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-    Pour valider ce devis, il vous suffit de nous renvoyer cet email signé
-    avec la mention « Bon pour accord » et de procéder au règlement de
-    l&apos;acompte selon les conditions indiquées.
+    Dans l&apos;attente de votre retour,
   </p>
-  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 20px; margin: 0 0 20px; text-align: center;">
-    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
-      Référence
-    </div>
-    <div style="font-size: 16px; font-weight: 600; color: #252525; margin-bottom: 14px;">
-      ${escapeHtml(quoteNumber)}
-    </div>
-    <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #B89456; font-weight: 600; margin-bottom: 6px;">
-      Total HT
-    </div>
-    <div style="font-size: 24px; font-weight: 600; color: #252525;">${totalLabel}</div>
+
+  <div style="border-top: 1px solid #EFE7D2; padding-top: 16px; font-size: 13px; line-height: 1.6; color: #555;">
+    <strong>David Salama</strong><br/>
+    Oshibori Concept International<br/>
+    <a href="mailto:david@oshibori-concept.com" style="color: #B89456; text-decoration: none;">david@oshibori-concept.com</a>
   </div>
-  <p style="font-size: 13px; line-height: 1.6; color: #888; text-align: center; margin: 0;">
-    Pour toute question, répondez simplement à cet email.
-    <br/>L&apos;équipe Oshibori Concept reste à votre disposition.
-  </p>
 </div>`;
 }
 
