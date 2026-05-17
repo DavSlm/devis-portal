@@ -106,3 +106,22 @@ export function countryNameToIso(name: string | null | undefined): string {
 export function isEuCountry(iso: string | null | undefined): boolean {
   return EU_COUNTRIES.has((iso ?? '').toUpperCase());
 }
+
+// =====================================================
+// EU pour le TRANSPORT (UPS Standard DEVIS = carrier 15) — set étendu.
+// Port verbatim de `_EU_ISO_CODES` (gmail_to_odoo.py L.614-620). À NE PAS
+// CONFONDRE avec EU_COUNTRIES (27 États membres stricts) utilisé pour la
+// position fiscale : ce set inclut UK, Suisse, Norvège, Balkans, Ukraine,
+// Biélorussie, Moldavie — tous routés sur UPS Standard chez Oshibori.
+// =====================================================
+const EU_TRANSPORT_COUNTRIES = new Set([
+  'FR', 'BE', 'DE', 'IT', 'ES', 'PT', 'NL', 'CH', 'AT', 'GB',
+  'SE', 'NO', 'DK', 'FI', 'IE', 'LU', 'PL', 'CZ', 'HU', 'RO',
+  'GR', 'HR', 'SK', 'SI', 'BG', 'EE', 'LV', 'LT', 'MT', 'CY',
+  'MC', 'AD', 'SM', 'LI', 'IS', 'ME', 'RS', 'BA', 'MK', 'AL',
+  'MD', 'UA', 'BY',
+]);
+
+export function isEuTransportCountry(iso: string | null | undefined): boolean {
+  return EU_TRANSPORT_COUNTRIES.has((iso ?? '').toUpperCase());
+}

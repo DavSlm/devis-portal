@@ -5,9 +5,8 @@
 
 import {
   attachDeliveryToOrder,
-  createPartner,
   createSaleOrder,
-  findPartnerByEmail,
+  findOrCreatePartner,
   type AttachDeliveryResult,
   type OdooSaleOrder,
 } from './client';
@@ -17,7 +16,7 @@ import {
   countryNameToIso,
   FISCAL_POSITION_LABEL,
   getFiscalPositionId,
-  isEuCountry,
+  isEuTransportCountry,
 } from './fiscalPosition';
 import { resolveProductVariant } from './products';
 import type { WizardState } from '@/types/wizard';
@@ -90,36 +89,71 @@ export async function createOdooDraftFromRequest(
   }
 
   // ---- Resolve or create the partner ----
-  let partner = await findPartnerByEmail(request.email);
-  let partnerCreated = false;
+  // Dédup multi-critères + création société + child contacts delivery/invoice,
+  // port verbatim de gmail_to_odoo.find_or_create_partner.
   const shipping = (request.shipping_address ?? {}) as {
+    contact?: string | null;
+    street1?: string | null;
+    street2?: string | null;
+    postal_code?: string | null;
+    city?: string | null;
+    state?: string | null;
+    country?: string | null;
+    carrier_phone?: string | null;
+  };
+  const billing = (request.billing_address ?? null) as {
     street1?: string | null;
     street2?: string | null;
     postal_code?: string | null;
     city?: string | null;
     country?: string | null;
-  };
-  const billing = (request.billing_address ?? null) as {
-    country?: string | null;
   } | null;
 
-  if (!partner) {
-    const name = request.company_name || request.full_name || request.email;
-    const partnerId = await createPartner({
-      name,
-      email: request.email,
-      phone: request.phone,
-      street: shipping.street1 ?? null,
-      street2: shipping.street2 ?? null,
-      zip: shipping.postal_code ?? null,
-      city: shipping.city ?? null,
-      countryName: shipping.country ?? null,
-      vat: request.vat_number ?? null,
-      isCompany: !!request.company_name,
-    });
-    partner = { id: partnerId, name, email: request.email, phone: request.phone ?? false };
-    partnerCreated = true;
-  }
+  // Décompose full_name → first_name / last_name pour la création particulier.
+  const fullName = (request.full_name ?? '').trim();
+  const [firstName = '', ...rest] = fullName.split(/\s+/);
+  const lastName = rest.join(' ');
+
+  // Détection langue : FR par défaut (cf. _FR_ISO_CODES Python). Heuristique
+  // simple : si le pays de livraison est dans la zone francophone, fr_FR ;
+  // sinon en_US. Le wizard ne capture pas la langue, on infère.
+  const deliveryCountryIso = countryNameToIso(shipping.country ?? null);
+  const FR_COUNTRIES = new Set([
+    'FR', 'BE', 'CH', 'LU', 'MC', 'MA', 'DZ', 'TN', 'CI', 'SN',
+    'CM', 'HT', 'CD', 'CG', 'ML', 'BF', 'TG', 'BJ', 'NE', 'GA',
+  ]);
+  const lang = FR_COUNTRIES.has(deliveryCountryIso) ? 'fr_FR' : 'en_US';
+
+  const partnerResult = await findOrCreatePartner({
+    email: request.email,
+    phone: request.phone,
+    companyName: request.company_name,
+    firstName,
+    lastName,
+    siret: request.siret,
+    vat: request.vat_number,
+    lang,
+    delivery: {
+      street: shipping.street1,
+      street2: shipping.street2,
+      zip: shipping.postal_code,
+      city: shipping.city,
+      countryName: shipping.country,
+      countryIso: deliveryCountryIso || null,
+      contactName: shipping.contact,
+      carrierPhone: shipping.carrier_phone,
+    },
+    billing: billing
+      ? {
+          street: billing.street1,
+          street2: billing.street2,
+          zip: billing.postal_code,
+          city: billing.city,
+          countryName: billing.country,
+          countryIso: countryNameToIso(billing.country ?? null) || null,
+        }
+      : null,
+  });
 
   // ---- Fiscal position ----
   const billingIso = countryNameToIso(billing?.country ?? shipping.country ?? null);
@@ -136,8 +170,11 @@ export async function createOdooDraftFromRequest(
   // NOTE : on N'INJECTE PAS de description sur la ligne. Odoo doit utiliser
   // le nom natif du produit (comme le script Python). Toute personnalisation
   // de la description serait une dérive non voulue.
+  //
+  // `note` reçoit le brief client — port verbatim de
+  // gmail_to_odoo.create_sale_order (L.1720, "customization" → "note").
   const order = await createSaleOrder({
-    partnerId: partner.id,
+    partnerId: partnerResult.partnerId,
     lines: [
       {
         productId: productResolution.variantId,
@@ -146,20 +183,22 @@ export async function createOdooDraftFromRequest(
     ],
     validityDate,
     clientOrderRef: `Demande #${request.id.slice(0, 8)}`,
+    note: request.brief ?? undefined,
     fiscalPositionId,
     companyId: parseInt(process.env.ODOO_COMPANY_ID ?? '1', 10),
   });
 
   // ---- Attach UPS delivery line via choose.delivery.carrier wizard ----
   // Port verbatim de gmail_to_odoo.add_delivery_to_order.
-  // Europe → carrier 15 (UPS Standard DEVIS), hors Europe → carrier 21 (Expedited).
-  // Si le pays de livraison n'est pas reconnu, on suit le défaut Python : Europe.
+  // Europe (set étendu UPS : UE + UK + CH + Balkans + UA/BY/MD) → carrier 15
+  // (UPS Standard DEVIS). Hors Europe → carrier 21 (Expedited Devis).
+  // Si le pays de livraison n'est pas reconnu, défaut Europe (cf. Python).
   //
   // Toute erreur (UPS down, tarif 0, wizard cassé, partner sans adresse…)
   // remonte ici : l'admin doit savoir POURQUOI le devis est bloqué.
   // La sale.order est déjà créée côté Odoo à ce stade — l'admin la
   // récupère via "Lier à un devis Odoo existant" après correction.
-  const isEu = deliveryIso ? isEuCountry(deliveryIso) : true;
+  const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
   const delivery = await attachDeliveryToOrder(order.id, isEu);
 
   // Pull the just-created order back into our DB and send the magic link.
@@ -171,8 +210,8 @@ export async function createOdooDraftFromRequest(
   return {
     ...sync,
     odooOrder: order,
-    partnerId: partner.id,
-    partnerCreated,
+    partnerId: partnerResult.partnerId,
+    partnerCreated: partnerResult.created,
     productResolution,
     fiscalPositionId,
     fiscalPositionLabel,

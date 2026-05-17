@@ -229,7 +229,7 @@ export function pdfUrl(saleOrderId: number, token: string): string {
 }
 
 // =====================================================
-// Partners (res.partner)
+// Partners (res.partner) — port verbatim de gmail_to_odoo.find_or_create_partner
 // =====================================================
 
 export interface OdooPartner {
@@ -250,17 +250,16 @@ export async function findPartnerByEmail(email: string): Promise<OdooPartner | n
   return rows[0] ?? null;
 }
 
-export interface CreatePartnerInput {
-  name: string;
-  email: string;
-  phone?: string | null;
-  street?: string | null;
-  street2?: string | null;
-  zip?: string | null;
-  city?: string | null;
-  countryName?: string | null;
-  vat?: string | null;
-  isCompany?: boolean;
+async function searchCompanyPartner(
+  domain: unknown[],
+): Promise<OdooPartner | null> {
+  const rows = await executeKw<OdooPartner[]>(
+    'res.partner',
+    'search_read',
+    [domain],
+    { fields: ['id', 'name', 'email', 'phone'], limit: 1 },
+  );
+  return rows[0] ?? null;
 }
 
 export async function findCountryIdByName(name: string): Promise<number | null> {
@@ -274,6 +273,37 @@ export async function findCountryIdByName(name: string): Promise<number | null> 
   return rows[0]?.id ?? null;
 }
 
+async function findCountryIdByIso(iso: string): Promise<number | null> {
+  if (!iso) return null;
+  const rows = await executeKw<Array<{ id: number }>>(
+    'res.country',
+    'search_read',
+    [[['code', '=', iso.toUpperCase()]]],
+    { fields: ['id'], limit: 1 },
+  );
+  return rows[0]?.id ?? null;
+}
+
+export interface CreatePartnerInput {
+  name: string;
+  email: string;
+  phone?: string | null;
+  street?: string | null;
+  street2?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  countryName?: string | null;
+  countryIso?: string | null;
+  vat?: string | null;
+  siret?: string | null;
+  lang?: string | null; // ex. 'fr_FR' / 'en_US'
+  isCompany?: boolean;
+}
+
+/**
+ * Crée un res.partner. Si Odoo refuse le VAT (TVA invalide), retry sans
+ * le champ vat. Port verbatim de find_or_create_partner L.1411-1425.
+ */
 export async function createPartner(input: CreatePartnerInput): Promise<number> {
   const data: Record<string, unknown> = {
     name: input.name,
@@ -286,11 +316,244 @@ export async function createPartner(input: CreatePartnerInput): Promise<number> 
   if (input.zip) data.zip = input.zip;
   if (input.city) data.city = input.city;
   if (input.vat) data.vat = input.vat;
-  if (input.countryName) {
-    const countryId = await findCountryIdByName(input.countryName);
-    if (countryId) data.country_id = countryId;
+  if (input.siret) data.company_registry = input.siret.replace(/\s+/g, '');
+  if (input.lang) data.lang = input.lang;
+
+  let countryId: number | null = null;
+  if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
+  if (!countryId && input.countryName)
+    countryId = await findCountryIdByName(input.countryName);
+  if (countryId) data.country_id = countryId;
+
+  try {
+    return await executeKw<number>('res.partner', 'create', [data]);
+  } catch (err) {
+    const msg = (err as Error).message ?? '';
+    const looksLikeVatError =
+      input.vat && /\bvat\b|tva|numéro\s*vat/i.test(msg);
+    if (!looksLikeVatError) throw err;
+    console.warn(`TVA invalide « ${input.vat} » ignorée, création sans TVA.`);
+    delete data.vat;
+    return executeKw<number>('res.partner', 'create', [data]);
   }
+}
+
+export interface CreateChildAddressInput {
+  parentId: number;
+  type: 'delivery' | 'invoice' | 'contact' | 'other';
+  street?: string | null;
+  street2?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  countryName?: string | null;
+  countryIso?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  /** Vide par défaut sur les enfants (règle Oshibori, cf. _build_address_vals L.1299). */
+  name?: string;
+}
+
+export async function createChildAddress(
+  input: CreateChildAddressInput,
+): Promise<number> {
+  const data: Record<string, unknown> = {
+    name: input.name ?? '',
+    type: input.type,
+    parent_id: input.parentId,
+  };
+  if (input.street) data.street = input.street;
+  if (input.street2) data.street2 = input.street2;
+  if (input.zip) data.zip = input.zip;
+  if (input.city) data.city = input.city;
+  if (input.email) data.email = input.email;
+  if (input.phone) data.phone = input.phone;
+
+  let countryId: number | null = null;
+  if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
+  if (!countryId && input.countryName)
+    countryId = await findCountryIdByName(input.countryName);
+  if (countryId) data.country_id = countryId;
+
   return executeKw<number>('res.partner', 'create', [data]);
+}
+
+export interface FindOrCreatePartnerInput {
+  // Identification
+  email: string;
+  phone?: string | null;
+  companyName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  siret?: string | null;
+  vat?: string | null;
+  lang?: string | null;
+
+  // Adresses (la principale du partner = livraison ; facturation = enfant si différente)
+  delivery: {
+    street?: string | null;
+    street2?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    countryName?: string | null;
+    countryIso?: string | null;
+    contactName?: string | null;
+    carrierPhone?: string | null;
+  };
+  billing?: {
+    street?: string | null;
+    street2?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    countryName?: string | null;
+    countryIso?: string | null;
+  } | null;
+}
+
+export interface FindOrCreatePartnerResult {
+  partnerId: number;
+  created: boolean;
+  isCompany: boolean;
+  /** id du child delivery si créé, sinon undefined. */
+  deliveryAddressId?: number;
+  /** id du child invoice si créé, sinon undefined. */
+  invoiceAddressId?: number;
+}
+
+/**
+ * Cherche un partner société par SIRET → VAT → téléphone → nom, puis crée
+ * si introuvable. Pour les sociétés nouvellement créées, crée aussi les
+ * enfants delivery (et invoice si distincte). Port verbatim de
+ * gmail_to_odoo.find_or_create_partner L.1312-1456.
+ */
+export async function findOrCreatePartner(
+  input: FindOrCreatePartnerInput,
+): Promise<FindOrCreatePartnerResult> {
+  const company = (input.companyName ?? '').trim();
+  const siret = (input.siret ?? '').replace(/\s+/g, '');
+  const vat = (input.vat ?? '').trim();
+  const phone = (input.phone ?? '').trim();
+
+  // ── Dédup société (ordre : SIRET → VAT → phone → nom) ─────────
+  let existing: OdooPartner | null = null;
+  if (siret) {
+    existing = await searchCompanyPartner([
+      ['company_registry', '=', siret],
+      ['is_company', '=', true],
+    ]);
+  }
+  if (!existing && vat) {
+    existing = await searchCompanyPartner([
+      ['vat', '=', vat],
+      ['is_company', '=', true],
+    ]);
+  }
+  if (!existing && phone) {
+    existing = await searchCompanyPartner([
+      ['phone', '=', phone],
+      ['is_company', '=', true],
+    ]);
+  }
+  if (!existing && company) {
+    existing = await searchCompanyPartner([
+      ['name', '=', company],
+      ['is_company', '=', true],
+    ]);
+  }
+  if (existing) {
+    return { partnerId: existing.id, created: false, isCompany: true };
+  }
+
+  // ── Particulier ───────────────────────────────────────────────
+  if (!company) {
+    const personName = `${input.firstName ?? ''} ${input.lastName ?? ''}`.trim();
+    const partnerId = await createPartner({
+      name: personName || input.email,
+      email: input.email,
+      phone: input.phone,
+      lang: input.lang,
+      isCompany: false,
+      street: input.delivery.street,
+      street2: input.delivery.street2,
+      zip: input.delivery.zip,
+      city: input.delivery.city,
+      countryName: input.delivery.countryName,
+      countryIso: input.delivery.countryIso,
+    });
+    return { partnerId, created: true, isCompany: false };
+  }
+
+  // ── Société + enfants delivery / invoice ──────────────────────
+  const companyId = await createPartner({
+    name: company,
+    email: input.email,
+    phone: input.phone,
+    vat,
+    siret,
+    lang: input.lang,
+    isCompany: true,
+    street: input.delivery.street,
+    street2: input.delivery.street2,
+    zip: input.delivery.zip,
+    city: input.delivery.city,
+    countryName: input.delivery.countryName,
+    countryIso: input.delivery.countryIso,
+  });
+
+  let deliveryAddressId: number | undefined;
+  if (
+    input.delivery.street ||
+    input.delivery.zip ||
+    input.delivery.city ||
+    input.delivery.countryName ||
+    input.delivery.countryIso
+  ) {
+    deliveryAddressId = await createChildAddress({
+      parentId: companyId,
+      type: 'delivery',
+      name: input.delivery.contactName ?? '',
+      street: input.delivery.street,
+      street2: input.delivery.street2,
+      zip: input.delivery.zip,
+      city: input.delivery.city,
+      countryName: input.delivery.countryName,
+      countryIso: input.delivery.countryIso,
+      email: input.email,
+      phone: input.delivery.carrierPhone || input.phone,
+    });
+  }
+
+  let invoiceAddressId: number | undefined;
+  if (input.billing) {
+    const sameAsDelivery =
+      (input.billing.street ?? '').trim().toLowerCase() ===
+        (input.delivery.street ?? '').trim().toLowerCase() &&
+      (input.billing.zip ?? '').trim() === (input.delivery.zip ?? '').trim() &&
+      (input.billing.city ?? '').trim().toLowerCase() ===
+        (input.delivery.city ?? '').trim().toLowerCase();
+
+    if (!sameAsDelivery) {
+      invoiceAddressId = await createChildAddress({
+        parentId: companyId,
+        type: 'invoice',
+        street: input.billing.street,
+        street2: input.billing.street2,
+        zip: input.billing.zip || input.delivery.zip, // zip_hint fallback (cf. Python)
+        city: input.billing.city,
+        countryName: input.billing.countryName,
+        countryIso: input.billing.countryIso,
+        email: input.email,
+        phone: input.phone,
+      });
+    }
+  }
+
+  return {
+    partnerId: companyId,
+    created: true,
+    isCompany: true,
+    deliveryAddressId,
+    invoiceAddressId,
+  };
 }
 
 // =====================================================
@@ -347,8 +610,19 @@ export interface CreateSaleOrderInput {
   note?: string;
   fiscalPositionId?: number;
   companyId?: number;
+  opportunityId?: number;
+  partnerInvoiceId?: number;
+  partnerShippingId?: number;
 }
 
+/**
+ * Crée le sale.order PUIS chaque sale.order.line séparément.
+ *
+ * C'est volontaire et critique : si on passait `order_line: [[0,0,{...}]]`
+ * inline dans le `sale.order.create`, Odoo NE DÉCLENCHE PAS les onchange
+ * sur product_id → `price_unit` reste à 0 et `tax_ids` n'est pas appliqué.
+ * Port verbatim du pattern Python (gmail_to_odoo.create_sale_order L.1715-1741).
+ */
 export async function createSaleOrder(
   input: CreateSaleOrderInput,
 ): Promise<OdooSaleOrder> {
@@ -356,23 +630,28 @@ export async function createSaleOrder(
     partner_id: input.partnerId,
     state: 'draft',
   };
-  // (0, 0, {fields}) — Odoo command tuple to create a new line.
-  data.order_line = input.lines.map((l) => [
-    0,
-    0,
-    {
-      product_id: l.productId,
-      product_uom_qty: l.quantity,
-      ...(l.description ? { name: l.description } : {}),
-    },
-  ]);
   if (input.validityDate) data.validity_date = input.validityDate;
   if (input.clientOrderRef) data.client_order_ref = input.clientOrderRef;
   if (input.note) data.note = input.note;
   if (input.fiscalPositionId) data.fiscal_position_id = input.fiscalPositionId;
   if (input.companyId) data.company_id = input.companyId;
+  if (input.opportunityId) data.opportunity_id = input.opportunityId;
+  if (input.partnerInvoiceId) data.partner_invoice_id = input.partnerInvoiceId;
+  if (input.partnerShippingId) data.partner_shipping_id = input.partnerShippingId;
 
   const newId = await executeKw<number>('sale.order', 'create', [data]);
+
+  // Step 2 : crée chaque ligne séparément pour que Odoo déclenche les onchange
+  // (price_unit depuis le pricelist, tax_ids depuis la fiscal_position).
+  for (const line of input.lines) {
+    const lineVals: Record<string, unknown> = {
+      order_id: newId,
+      product_id: line.productId,
+      product_uom_qty: line.quantity,
+    };
+    if (line.description) lineVals.name = line.description;
+    await executeKw<number>('sale.order.line', 'create', [lineVals]);
+  }
 
   const created = await readSaleOrder(newId);
   if (!created) throw new Error(`sale.order ${newId} created but not readable`);
@@ -452,13 +731,10 @@ export async function attachDeliveryToOrder(
     );
   }
 
-  if (deliveryPrice <= 0) {
-    throw new Error(
-      `Tarif UPS retourné à 0 € pour ${ctx}. Vérifie l'adresse de livraison du partner Odoo et la disponibilité du compte UPS. Le devis a été créé dans Odoo mais sans ligne de transport — corrige et relie via "Lier à un devis Odoo existant", ou supprime-le et relance.`,
-    );
-  }
-
   // 4. Confirme → ajoute la ligne de transport sur la sale.order.
+  //    Note : on confirme MÊME SI delivery_price=0 (port verbatim Python
+  //    L.1670-1683 : "prix à renseigner manuellement"). La ligne existe
+  //    et l'admin la complétera dans Odoo si besoin.
   try {
     await executeKw<unknown>('choose.delivery.carrier', 'button_confirm', [[wizardId]]);
   } catch (err) {
