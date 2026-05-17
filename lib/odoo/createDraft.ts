@@ -172,11 +172,11 @@ export async function createOdooDraftFromRequest(
   const validityDate = validity.toISOString().slice(0, 10);
 
   // NOTE : on N'INJECTE PAS de description sur la ligne. Odoo doit utiliser
-  // le nom natif du produit (comme le script Python). Toute personnalisation
-  // de la description serait une dérive non voulue.
+  // le nom natif du produit. Aucune dérive.
   //
-  // `note` reçoit le brief client — port verbatim de
-  // gmail_to_odoo.create_sale_order (L.1720, "customization" → "note").
+  // On NE TOUCHE PAS au champ `note` de la sale.order : c'est là que
+  // vivent les CGV Oshibori (template Odoo). Le brief client reste dans
+  // Supabase (visible côté admin uniquement). Ne JAMAIS écraser ce champ.
   const order = await createSaleOrder({
     partnerId: partnerResult.partnerId,
     lines: [
@@ -187,7 +187,6 @@ export async function createOdooDraftFromRequest(
     ],
     validityDate,
     clientOrderRef: `Demande #${request.id.slice(0, 8)}`,
-    note: request.brief ?? undefined,
     fiscalPositionId,
     companyId: parseInt(process.env.ODOO_COMPANY_ID ?? '1', 10),
   });

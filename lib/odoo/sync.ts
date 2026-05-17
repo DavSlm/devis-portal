@@ -6,6 +6,7 @@
 import { Resend } from 'resend';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
   fetchSaleOrderSnapshot,
@@ -23,6 +24,13 @@ const REPLY_TO = 'david@oshibori-concept.com';
 // (deploy avec le bundle Next.js). Si absent, l'email part avec seulement
 // le PDF du devis Odoo et on log un warning.
 const RIB_FILE_PATH = path.join(process.cwd(), 'public', 'documents', 'rib.pdf');
+
+// Signature email officielle (HTML), chargée une fois au démarrage.
+// Synchrone exprès — on veut crasher au boot si le fichier manque.
+const SIGNATURE_HTML = readFileSync(
+  path.join(process.cwd(), 'lib', 'odoo', 'gmail_signature.html'),
+  'utf-8',
+);
 
 export interface SyncResult {
   quoteId: string;
@@ -265,51 +273,30 @@ function formatQty(n: number): string {
     : n.toLocaleString('fr-FR', { minimumFractionDigits: 2 });
 }
 
-function renderRecapTable(
+/**
+ * Récap produits + quantités sous forme HTML brut, équivalent texte d'une
+ * énumération (« 1. Produit X — 480 unités », etc.). Pas de style fantaisie :
+ * c'est juste pour rappeler ce qui est dans le devis joint.
+ */
+function renderRecapList(
   productLines: OdooSaleOrderLine[],
   deliveryLine: OdooSaleOrderLine | null,
 ): string {
-  const rows = productLines.map((l) => {
+  const items = productLines.map((l) => {
     const productName = Array.isArray(l.product_id) ? l.product_id[1] : '—';
-    return `
-      <tr>
-        <td style="padding: 8px 12px 8px 0; border-bottom: 1px solid #eee; vertical-align: top;">
-          <div style="font-size: 13px; color: #252525; white-space: pre-wrap;">${escapeHtml(productName)}</div>
-        </td>
-        <td style="padding: 8px 0; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
-          <div style="font-size: 13px; color: #252525;">${escapeHtml(formatQty(l.product_uom_qty))}</div>
-          <div style="font-size: 11px; color: #888;">${escapeHtml(formatEuroFr(l.price_unit))} / u</div>
-        </td>
-        <td style="padding: 8px 0 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
-          <div style="font-size: 13px; color: #252525; font-weight: 600;">${escapeHtml(formatEuroFr(l.price_subtotal))}</div>
-        </td>
-      </tr>`;
+    return `<li>${escapeHtml(productName)} — ${escapeHtml(formatQty(l.product_uom_qty))} unité(s) (${escapeHtml(formatEuroFr(l.price_subtotal))})</li>`;
   }).join('');
-  const deliveryRow = deliveryLine
-    ? `
-      <tr>
-        <td style="padding: 8px 12px 8px 0; border-bottom: 1px solid #eee; vertical-align: top;">
-          <div style="font-size: 13px; color: #888; font-style: italic;">Transport</div>
-        </td>
-        <td style="padding: 8px 0; border-bottom: 1px solid #eee; text-align: right;"></td>
-        <td style="padding: 8px 0 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; text-align: right; white-space: nowrap;">
-          <div style="font-size: 13px; color: #252525;">${escapeHtml(formatEuroFr(deliveryLine.price_subtotal))}</div>
-        </td>
-      </tr>`
+  const transport = deliveryLine
+    ? `<li>Transport — ${escapeHtml(formatEuroFr(deliveryLine.price_subtotal))}</li>`
     : '';
-  return `
-    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
-      <thead>
-        <tr>
-          <th style="text-align: left; padding: 6px 12px 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Produit</th>
-          <th style="text-align: right; padding: 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Quantité</th>
-          <th style="text-align: right; padding: 6px 0 6px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; border-bottom: 2px solid #EFE7D2;">Sous-total</th>
-        </tr>
-      </thead>
-      <tbody>${rows}${deliveryRow}</tbody>
-    </table>`;
+  return `<ul style="margin: 8px 0 16px 0; padding-left: 20px;">${items}${transport}</ul>`;
 }
 
+/**
+ * Email transactionnel sobre, style « David écrit lui-même ». Pas de logo
+ * en header, pas de bouton coloré, pas de cartes. Juste du texte + un lien
+ * + la signature officielle de David à la fin.
+ */
 function renderClientEmail({
   quoteNumber,
   totalHt,
@@ -318,58 +305,23 @@ function renderClientEmail({
   odooLink,
 }: ClientEmailArgs): string {
   const totalLabel = formatEuroFr(totalHt);
-  return `
-<div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; color: #252525;">
-  <div style="text-align: center; margin-bottom: 24px;">
-    <img src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png" alt="Oshibori Concept" style="height: 48px; width: auto;">
-  </div>
+  return `<div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; color: #000;">
+<p>Bonjour,</p>
 
-  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">Bonjour,</p>
+<p>Merci pour votre demande de devis et l'intérêt porté pour nos produits.</p>
 
-  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 16px;">
-    Merci pour votre demande de devis et l&apos;intérêt porté pour nos produits.
-  </p>
+<p>Veuillez trouver en pièce jointe le devis, également consultable en ligne via ce lien :<br>
+<a href="${escapeHtml(odooLink)}">${escapeHtml(odooLink)}</a></p>
 
-  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 8px;">
-    Veuillez trouver en pièce jointe le devis (ou cliquez sur le bouton ci-dessous pour le consulter en ligne).
-  </p>
+<p><strong>Rappel des produits et quantités dans le devis :</strong></p>
+${renderRecapList(productLines, deliveryLine)}
 
-  <div style="text-align: center; margin: 20px 0;">
-    <a href="${escapeHtml(odooLink)}" style="display: inline-block; padding: 12px 28px; background: #D1B780; color: #fff; text-decoration: none; font-weight: 600; font-size: 14px; border-radius: 6px;">
-      Consulter le devis ${escapeHtml(quoteNumber)}
-    </a>
-  </div>
+<p>Référence : <strong>${escapeHtml(quoteNumber)}</strong> — Total HT : <strong>${escapeHtml(totalLabel)}</strong></p>
 
-  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600; margin: 24px 0 8px;">
-    Rappel des produits et quantités
-  </div>
-  ${renderRecapTable(productLines, deliveryLine)}
+<p>Je reste à votre disposition si vous avez des questions.<br>
+Dans l'attente de votre retour,</p>
 
-  <div style="background: #F5EFE0; border: 1px solid #EFE7D2; border-radius: 8px; padding: 16px 20px; margin: 20px 0;">
-    <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px;">
-      <div>
-        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600;">Référence</div>
-        <div style="font-size: 14px; font-weight: 600; color: #252525; font-family: monospace;">${escapeHtml(quoteNumber)}</div>
-      </div>
-      <div style="text-align: right;">
-        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #B89456; font-weight: 600;">Total HT</div>
-        <div style="font-size: 18px; font-weight: 600; color: #252525;">${totalLabel}</div>
-      </div>
-    </div>
-  </div>
-
-  <p style="font-size: 14px; line-height: 1.6; margin: 16px 0 8px;">
-    Je reste à votre disposition si vous avez des questions.
-  </p>
-  <p style="font-size: 14px; line-height: 1.6; margin: 0 0 24px;">
-    Dans l&apos;attente de votre retour,
-  </p>
-
-  <div style="border-top: 1px solid #EFE7D2; padding-top: 16px; font-size: 13px; line-height: 1.6; color: #555;">
-    <strong>David Salama</strong><br/>
-    Oshibori Concept International<br/>
-    <a href="mailto:david@oshibori-concept.com" style="color: #B89456; text-decoration: none;">david@oshibori-concept.com</a>
-  </div>
+${SIGNATURE_HTML}
 </div>`;
 }
 
