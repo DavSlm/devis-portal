@@ -3,10 +3,11 @@
 // Aucune dérive : mêmes maps, mêmes détecteurs (substring matching),
 // même ordre d'évaluation, mêmes défauts, mêmes fallbacks.
 //
-// Le résolveur de variant prend une string unique — équivalent du
-// `lookup_name = "{category} {shopify_product}"` côté Python — et fait
-// du substring-matching dessus. La string est assemblée côté wrapper
-// (resolveProductVariant) à partir de l'état wizard.
+// La string envoyée au résolveur est l'équivalent du
+// `lookup_name = "{category} {shopify_product}"` côté Python — on
+// concatène tous les champs du wizard susceptibles de contenir un
+// mot-clé pertinent, et on délègue à detect_type / detect_* puis à la
+// bonne table (PLATEAUX, FULL, SEMI, NEUTRE).
 // =====================================================
 
 import type { WizardState } from '@/types/wizard';
@@ -52,9 +53,17 @@ const FULL: Record<string, number> = {
   '6g|coton|sans': 1445,
 };
 
-const PLATEAUX_VARIANT_ID = 1014;
+// ── PLATEAUX (oshiboris sèches, non emballées individuellement) ─
+// Clé : taille du plateau. Carton = 48 plateaux dans tous les cas.
+// Composition standard : 20% coton, 80% bambou.
+const PLATEAUX: Record<string, number> = {
+  '1x10': 627, // tmpl 701 — "Tray 1x10" — STANDARD, 5,80 €
+  '1x4': 240,  // tmpl 485 — "Plateau 1x4"
+  '1x5': 882,  // tmpl 956 — "Plateau 1x5"
+  '1x12': 1120, // tmpl 1090 — "Plateau 1x12"
+};
 
-type PersoType = 'neutre' | 'semi' | 'full';
+type PersoType = 'plateaux' | 'neutre' | 'semi' | 'full';
 type Grammage = '6g' | '10g' | '15g';
 type Couleur =
   | 'blanc'
@@ -72,6 +81,14 @@ type Parfum = 'the blanc' | 'the vert' | 'fleur oranger' | 'sans';
 
 function detectType(name: string): PersoType {
   const n = name.toLowerCase();
+  // Plateaux en priorité (peut contenir "oshibori" mais c'est un format distinct).
+  if (
+    ['plateau', 'tray', 'oshibori sec', 'oshibori sèche', 'dry oshibori', 'unwrapped'].some(
+      (k) => n.includes(k),
+    )
+  ) {
+    return 'plateaux';
+  }
   if (
     ['full perso', 'full-perso', 'full personaliz', 'full personalis'].some((k) =>
       n.includes(k),
@@ -87,6 +104,15 @@ function detectType(name: string): PersoType {
     return 'semi';
   }
   return 'neutre';
+}
+
+function detectPlateauSize(name: string): string {
+  // Python: name.lower().replace(' ', '').replace('×', 'x') — espaces littéraux uniquement.
+  const n = name.toLowerCase().replace(/ /g, '').replace(/×/g, 'x');
+  for (const size of ['1x4', '1x5', '1x10', '1x12']) {
+    if (n.includes(size)) return size;
+  }
+  return '1x10'; // format standard par défaut
 }
 
 function detectGrammage(name: string): Grammage {
@@ -146,6 +172,25 @@ export interface ResolvedProduct {
  */
 export function resolveVariantFromName(name: string): ResolvedProduct | null {
   const ptype = detectType(name);
+
+  if (ptype === 'plateaux') {
+    const size = detectPlateauSize(name);
+    const vid = PLATEAUX[size];
+    if (vid) {
+      return {
+        variantId: vid,
+        description: `Plateaux ${size}`,
+        fallback: false,
+      };
+    }
+    const fb = PLATEAUX['1x10'];
+    return {
+      variantId: fb,
+      description: `Plateaux ${size} → FALLBACK 1x10`,
+      fallback: true,
+    };
+  }
+
   const grammage = detectGrammage(name);
   const parfum = detectParfum(name);
 
@@ -218,37 +263,24 @@ export function resolveVariantFromName(name: string): ResolvedProduct | null {
 /**
  * Wrapper pour les WizardState. Construit un `lookup_name` équivalent à ce
  * que reçoit le script Python (category + product Shopify) en concaténant
- * tous les champs susceptibles de contenir un mot-clé pertinent. Puis
- * délègue à resolveVariantFromName().
- *
- * Plateaux : court-circuit (le Python ne gère pas ce produit ; on garde le
- * variant_id direct PF perso / AREV).
+ * tous les champs susceptibles de contenir un mot-clé pertinent, puis
+ * délègue à resolveVariantFromName(). La détection plateaux est gérée en
+ * interne par detect_type — pas de court-circuit séparé.
  */
 export function resolveProductVariant(state: WizardState): ResolvedProduct | null {
-  if (!state.productType) return null;
-
-  if (state.productType === 'Plateaux') {
-    return {
-      variantId: PLATEAUX_VARIANT_ID,
-      description: 'Plateaux 1x10 Serviettes Sèches',
-      fallback: false,
-    };
-  }
-
-  // Équivalent du `lookup_name = f"{category} {shopify_product}"` côté Python.
-  // On concatène tous les champs du wizard qui peuvent contenir des mots-clés
-  // détectables.
   const lookupName = [
+    state.productType,
+    state.category,
     state.persoLevel,
     state.grammage,
     state.matiere,
     state.packaging,
+    state.packagingId,
     state.scenteur,
-    state.category,
-    state.productType,
   ]
     .filter((v) => v != null && v !== '')
     .join(' ');
 
+  if (!lookupName) return null;
   return resolveVariantFromName(lookupName);
 }
