@@ -40,7 +40,7 @@ export interface CreateDraftResult extends SyncResult {
   productResolution: { variantId: number; description: string; fallback: boolean };
   fiscalPositionId: number;
   fiscalPositionLabel: string;
-  delivery: AttachDeliveryResult | null;
+  delivery: AttachDeliveryResult;
 }
 
 export async function createOdooDraftFromRequest(
@@ -154,13 +154,13 @@ export async function createOdooDraftFromRequest(
   // Port verbatim de gmail_to_odoo.add_delivery_to_order.
   // Europe → carrier 15 (UPS Standard DEVIS), hors Europe → carrier 21 (Expedited).
   // Si le pays de livraison n'est pas reconnu, on suit le défaut Python : Europe.
+  //
+  // Toute erreur (UPS down, tarif 0, wizard cassé, partner sans adresse…)
+  // remonte ici : l'admin doit savoir POURQUOI le devis est bloqué.
+  // La sale.order est déjà créée côté Odoo à ce stade — l'admin la
+  // récupère via "Lier à un devis Odoo existant" après correction.
   const isEu = deliveryIso ? isEuCountry(deliveryIso) : true;
-  let delivery: AttachDeliveryResult | null = null;
-  try {
-    delivery = await attachDeliveryToOrder(order.id, isEu);
-  } catch (err) {
-    console.error('attachDeliveryToOrder failed', err);
-  }
+  const delivery = await attachDeliveryToOrder(order.id, isEu);
 
   // Pull the just-created order back into our DB and send the magic link.
   const sync = await syncOdooOrderToQuote({

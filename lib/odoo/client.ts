@@ -397,34 +397,46 @@ export interface AttachDeliveryResult {
   carrierId: number;
   carrierName: string;
   deliveryPrice: number;
-  added: boolean;
 }
 
+/**
+ * Attache la ligne de transport au sale.order via le wizard
+ * choose.delivery.carrier. Toute erreur Odoo / UPS est remontée verbatim
+ * dans le message d'exception — l'admin doit pouvoir voir POURQUOI le
+ * devis est bloqué (cf. bandeau "Erreur Odoo" sur la page admin).
+ */
 export async function attachDeliveryToOrder(
   orderId: number,
   isEu: boolean,
 ): Promise<AttachDeliveryResult> {
   const carrierId = isEu ? CARRIER_ID_EU : CARRIER_ID_NON_EU;
   const carrierName = isEu ? 'UPS Standard DEVIS' : 'Expedited Devis';
+  const ctx = `${carrierName} (carrier_id=${carrierId})`;
 
-  // 1. Génère les lignes de conditionnement (cartons / master cartons).
-  //    Côté Python certaines versions Odoo retournent None → "cannot marshal None"
-  //    en XML-RPC. En JSON-RPC null est valide, mais on garde le try/catch défensif.
+  // 1. Génère les lignes de conditionnement. Non-fatal — certaines versions
+  //    Odoo renvoient None et le wizard fonctionne aussi sans (cf. Python).
   try {
     await executeKw<unknown>('sale.order', 'action_generate_order_packaging', [[orderId]]);
-  } catch {
-    // non-fatal
+  } catch (err) {
+    console.warn('action_generate_order_packaging:', (err as Error).message);
   }
 
   // 2. Crée le wizard.
-  const wizardId = await executeKw<number>(
-    'choose.delivery.carrier',
-    'create',
-    [{ order_id: orderId, carrier_id: carrierId }],
-  );
+  let wizardId: number;
+  try {
+    wizardId = await executeKw<number>(
+      'choose.delivery.carrier',
+      'create',
+      [{ order_id: orderId, carrier_id: carrierId }],
+    );
+  } catch (err) {
+    throw new Error(
+      `Impossible de créer le wizard transporteur ${ctx} : ${(err as Error).message}`,
+    );
+  }
 
   // 3. Demande le prix à UPS et le lit sur le wizard.
-  let deliveryPrice = 0;
+  let deliveryPrice: number;
   try {
     await executeKw<unknown>('choose.delivery.carrier', 'update_price', [[wizardId]]);
     const rows = await executeKw<Array<{ delivery_price: number | false }>>(
@@ -435,19 +447,27 @@ export async function attachDeliveryToOrder(
     );
     deliveryPrice = Number(rows[0]?.delivery_price) || 0;
   } catch (err) {
-    console.warn('update_price failed', err);
+    throw new Error(
+      `L'API UPS n'a pas renvoyé de tarif (${ctx}) : ${(err as Error).message}`,
+    );
+  }
+
+  if (deliveryPrice <= 0) {
+    throw new Error(
+      `Tarif UPS retourné à 0 € pour ${ctx}. Vérifie l'adresse de livraison du partner Odoo et la disponibilité du compte UPS. Le devis a été créé dans Odoo mais sans ligne de transport — corrige et relie via "Lier à un devis Odoo existant", ou supprime-le et relance.`,
+    );
   }
 
   // 4. Confirme → ajoute la ligne de transport sur la sale.order.
-  let added = true;
   try {
     await executeKw<unknown>('choose.delivery.carrier', 'button_confirm', [[wizardId]]);
   } catch (err) {
-    console.warn('button_confirm failed', err);
-    added = false;
+    throw new Error(
+      `Impossible d'ajouter la ligne transport ${ctx} : ${(err as Error).message}`,
+    );
   }
 
-  return { carrierId, carrierName, deliveryPrice, added };
+  return { carrierId, carrierName, deliveryPrice };
 }
 
 // =====================================================
