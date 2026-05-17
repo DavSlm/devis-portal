@@ -232,6 +232,23 @@ export function pdfUrl(saleOrderId: number, token: string): string {
 // Partners (res.partner) — port verbatim de gmail_to_odoo.find_or_create_partner
 // =====================================================
 
+/**
+ * Normalise un numéro de téléphone avant push vers Odoo :
+ * - supprime espaces, tirets, points, parenthèses, slashes
+ * - préserve le préfixe + international
+ * - retourne null si la chaîne devient vide
+ *
+ * Évite que "06 31 59 95 00" et "0631599500" soient stockés comme deux
+ * formats différents — ce qui casserait la dédup partner-par-téléphone.
+ */
+export function normalizePhone(
+  p: string | null | undefined,
+): string | null {
+  if (!p) return null;
+  const cleaned = p.replace(/[\s\-.()\/]/g, '').trim();
+  return cleaned || null;
+}
+
 export interface OdooPartner {
   id: number;
   name: string;
@@ -315,7 +332,10 @@ export async function updatePartner(
   const data: Record<string, unknown> = {};
   if (input.name !== undefined && input.name !== null) data.name = input.name;
   if (input.email !== undefined && input.email !== null) data.email = input.email;
-  if (input.phone !== undefined && input.phone !== null) data.phone = input.phone;
+  if (input.phone !== undefined && input.phone !== null) {
+    const normalized = normalizePhone(input.phone);
+    if (normalized) data.phone = normalized;
+  }
   if (input.street !== undefined && input.street !== null) data.street = input.street;
   if (input.street2 !== undefined && input.street2 !== null) data.street2 = input.street2;
   if (input.zip !== undefined && input.zip !== null) data.zip = input.zip;
@@ -387,7 +407,10 @@ export async function upsertChildAddress(
   if (input.zip !== undefined && input.zip !== null) data.zip = input.zip;
   if (input.city !== undefined && input.city !== null) data.city = input.city;
   if (input.email !== undefined && input.email !== null) data.email = input.email;
-  if (input.phone !== undefined && input.phone !== null) data.phone = input.phone;
+  if (input.phone !== undefined && input.phone !== null) {
+    const normalized = normalizePhone(input.phone);
+    if (normalized) data.phone = normalized;
+  }
 
   let countryId: number | null = null;
   if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
@@ -443,6 +466,16 @@ export async function findOrderProductLines(orderId: number): Promise<number[]> 
   return rows.map((r) => r.id);
 }
 
+export async function findOrderDeliveryLines(orderId: number): Promise<number[]> {
+  const rows = await executeKw<Array<{ id: number }>>(
+    'sale.order.line',
+    'search_read',
+    [[['order_id', '=', orderId], ['is_delivery', '=', true]]],
+    { fields: ['id'] },
+  );
+  return rows.map((r) => r.id);
+}
+
 export async function updateSaleOrder(
   orderId: number,
   data: { fiscalPositionId?: number; note?: string; clientOrderRef?: string },
@@ -489,7 +522,8 @@ export async function createPartner(
     email: input.email,
     is_company: !!input.isCompany,
   };
-  if (input.phone) data.phone = input.phone;
+  const normalizedPhone = normalizePhone(input.phone);
+  if (normalizedPhone) data.phone = normalizedPhone;
   if (input.street) data.street = input.street;
   if (input.street2) data.street2 = input.street2;
   if (input.zip) data.zip = input.zip;
@@ -547,7 +581,8 @@ export async function createChildAddress(
   if (input.zip) data.zip = input.zip;
   if (input.city) data.city = input.city;
   if (input.email) data.email = input.email;
-  if (input.phone) data.phone = input.phone;
+  const normalizedPhone = normalizePhone(input.phone);
+  if (normalizedPhone) data.phone = normalizedPhone;
 
   let countryId: number | null = null;
   if (input.countryIso) countryId = await findCountryIdByIso(input.countryIso);
@@ -614,7 +649,7 @@ export async function findOrCreatePartner(
   const company = (input.companyName ?? '').trim();
   const siret = (input.siret ?? '').replace(/\s+/g, '');
   const vat = (input.vat ?? '').trim();
-  const phone = (input.phone ?? '').trim();
+  const phone = normalizePhone(input.phone) ?? '';
 
   // ── Dédup société (ordre : SIRET → VAT → phone → nom) ─────────
   let existing: OdooPartner | null = null;

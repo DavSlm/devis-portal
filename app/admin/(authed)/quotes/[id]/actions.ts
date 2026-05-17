@@ -8,7 +8,10 @@ import { formatEuro } from '@/lib/pricing';
 import { syncOdooOrderToQuote } from '@/lib/odoo/sync';
 import { createOdooDraftFromRequest } from '@/lib/odoo/createDraft';
 import {
+  attachDeliveryToOrder,
+  findOrderDeliveryLines,
   findOrderProductLines,
+  findPartnerByEmail,
   unlinkOrderLine,
   updateOrderLine,
   updatePartner,
@@ -19,6 +22,7 @@ import {
 import {
   countryNameToIso,
   getFiscalPositionId,
+  isEuTransportCountry,
 } from '@/lib/odoo/fiscalPosition';
 import { resolveProductVariant } from '@/lib/odoo/products';
 import type { WizardState } from '@/types/wizard';
@@ -153,6 +157,22 @@ export async function generateOdooDraft(formData: FormData): Promise<void> {
   if (!quantity || quantity <= 0) throw new Error('Quantité invalide');
 
   const supabase = createAdminClient();
+
+  // Idempotence : si un devis Odoo existe déjà pour cette demande, on
+  // redirige sans en créer un nouveau. Couvre le double-clic réseau lent
+  // ou la soumission concurrente du formulaire.
+  const { data: existing } = await supabase
+    .from('quote_requests')
+    .select('odoo_order_name')
+    .eq('id', requestId)
+    .single();
+  if (existing?.odoo_order_name) {
+    redirectBack(requestId, {
+      odooCreated: '1',
+      odooName: existing.odoo_order_name,
+    });
+  }
+
   await supabase
     .from('quote_requests')
     .update({ quantity })
@@ -634,6 +654,27 @@ export async function updateContact(formData: FormData): Promise<void> {
     redirectBack(requestId, { odooError: 'Email invalide.' });
   }
 
+  // Snapshot avant pour détecter un changement d'email.
+  const before = await loadRequest(requestId);
+  const emailChanged = !!before.email && before.email !== email;
+
+  // Si l'email change ET qu'un devis Odoo est déjà lié : check qu'un autre
+  // partner Odoo n'a pas déjà ce nouvel email. Si c'est le cas, on bloque
+  // pour éviter d'écraser un partner non lié ou de créer un conflit.
+  let odooOrderIdForCheck: number | null = null;
+  if (emailChanged) {
+    odooOrderIdForCheck = await resolveOdooOrderId(before);
+    if (odooOrderIdForCheck) {
+      const currentPartnerId = await getPartnerIdForOrder(odooOrderIdForCheck);
+      const collision = await findPartnerByEmail(email);
+      if (collision && collision.id !== currentPartnerId) {
+        redirectBack(requestId, {
+          odooError: `L'email « ${email} » est déjà attribué à « ${collision.name} » (Odoo id=${collision.id}). Modifie manuellement le bon partner ou fusionne les doublons côté Odoo avant de continuer.`,
+        });
+      }
+    }
+  }
+
   const supabase = createAdminClient();
   await supabase
     .from('quote_requests')
@@ -649,7 +690,7 @@ export async function updateContact(formData: FormData): Promise<void> {
 
   // Sync Odoo si un devis est déjà lié (avec backfill auto si besoin).
   const request = await loadRequest(requestId);
-  const odooOrderId = await resolveOdooOrderId(request);
+  const odooOrderId = odooOrderIdForCheck ?? (await resolveOdooOrderId(request));
   let vatRejected = false;
   if (odooOrderId) {
     const partnerId = await getPartnerIdForOrder(odooOrderId);
@@ -872,6 +913,26 @@ export async function updateProductConfig(formData: FormData): Promise<void> {
           product_uom_qty: quantity ?? before.quantity ?? 1,
         },
       ]);
+
+      // Re-déclenche le transport : le poids / volume du nouveau produit
+      // peut différer, donc le tarif UPS calculé sur l'ancien variant
+      // n'est plus valide. On unlink toutes les lignes is_delivery puis
+      // on appelle à nouveau attachDeliveryToOrder pour recalculer.
+      const deliveryLineIds = await findOrderDeliveryLines(odooOrderId);
+      for (const lid of deliveryLineIds) await unlinkOrderLine(lid);
+
+      const shipping = before.shipping_address;
+      const deliveryIso = countryNameToIso(
+        (shipping?.country as string | null) ?? null,
+      );
+      const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
+      try {
+        await attachDeliveryToOrder(odooOrderId, isEu);
+      } catch (err) {
+        redirectBack(requestId, {
+          odooError: `Variant changé mais transport non rattaché : ${(err as Error).message}`,
+        });
+      }
     } else if (quantity && quantity !== before.quantity) {
       // Même variant, juste la quantité change.
       await updateOrderLine(existingLineId!, { quantity });
