@@ -40,7 +40,10 @@ export interface CreateDraftResult {
   productResolution: { variantId: number; description: string; fallback: boolean };
   fiscalPositionId: number;
   fiscalPositionLabel: string;
-  delivery: AttachDeliveryResult;
+  /** null si l'attache UPS a échoué — voir `deliveryError` pour la raison. */
+  delivery: AttachDeliveryResult | null;
+  /** Message d'erreur si le transport n'a pas pu être attaché. */
+  deliveryError?: string;
 }
 
 export async function createOdooDraftFromRequest(
@@ -189,22 +192,10 @@ export async function createOdooDraftFromRequest(
     companyId: parseInt(process.env.ODOO_COMPANY_ID ?? '1', 10),
   });
 
-  // ---- Attach UPS delivery line via choose.delivery.carrier wizard ----
-  // Port verbatim de gmail_to_odoo.add_delivery_to_order.
-  // Europe (set étendu UPS : UE + UK + CH + Balkans + UA/BY/MD) → carrier 15
-  // (UPS Standard DEVIS). Hors Europe → carrier 21 (Expedited Devis).
-  // Si le pays de livraison n'est pas reconnu, défaut Europe (cf. Python).
-  //
-  // Toute erreur (UPS down, tarif 0, wizard cassé, partner sans adresse…)
-  // remonte ici : l'admin doit savoir POURQUOI le devis est bloqué.
-  // La sale.order est déjà créée côté Odoo à ce stade — l'admin la
-  // récupère via "Lier à un devis Odoo existant" après correction.
-  const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
-  const delivery = await attachDeliveryToOrder(order.id, isEu);
-
-  // Mémorise le nom + id du devis Odoo sur la quote_request. Le bouton
-  // "Envoyer au client" lira cette valeur pour déclencher le sync + magic
-  // link, et la page admin affiche un lien direct "Accéder au devis".
+  // Mémorise le nom + id du devis Odoo sur la quote_request AVANT de
+  // tenter le transport. La sale.order existe déjà côté Odoo donc on
+  // veut absolument que le lien soit sauvegardé même si UPS plante après.
+  // Sans ça, un retry recréerait un doublon.
   const { error: updateErr } = await admin
     .from('quote_requests')
     .update({
@@ -219,6 +210,25 @@ export async function createOdooDraftFromRequest(
     );
   }
 
+  // ---- Attach UPS delivery line via choose.delivery.carrier wizard ----
+  // Port verbatim de gmail_to_odoo.add_delivery_to_order.
+  // Europe (set étendu UPS) → carrier 15, hors Europe → carrier 21.
+  //
+  // NON BLOQUANT : la sale.order existe déjà côté Odoo. Si UPS échoue
+  // (timeout API, adresse partner incomplète, tarif 0…), on n'efface
+  // pas le devis et on n'empêche pas l'admin de continuer. On remonte
+  // l'erreur sous forme de warning ambre dans l'UI ("transport non
+  // attaché — ajoute-le manuellement dans Odoo").
+  const isEu = deliveryIso ? isEuTransportCountry(deliveryIso) : true;
+  let delivery: AttachDeliveryResult | null = null;
+  let deliveryError: string | undefined;
+  try {
+    delivery = await attachDeliveryToOrder(order.id, isEu);
+  } catch (err) {
+    deliveryError = (err as Error).message;
+    console.warn(`Transport non attaché sur ${order.name} :`, deliveryError);
+  }
+
   return {
     odooOrder: order,
     partnerId: partnerResult.partnerId,
@@ -228,5 +238,6 @@ export async function createOdooDraftFromRequest(
     fiscalPositionId,
     fiscalPositionLabel,
     delivery,
+    deliveryError,
   };
 }

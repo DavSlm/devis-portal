@@ -31,6 +31,7 @@ interface PageProps {
     odooError?: string;
     odooName?: string;
     vatRejected?: string;
+    deliveryWarning?: string;
     edit?: string;
   }>;
 }
@@ -45,6 +46,7 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
     quote: quoteId,
     odooError,
     vatRejected,
+    deliveryWarning,
     edit,
   } = await searchParams;
   const odooBaseUrl = (process.env.ODOO_URL ?? '').replace(/\/$/, '');
@@ -122,6 +124,27 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
         >
           <strong className="block mb-1">Erreur Odoo</strong>
           <span>{decodeURIComponent(odooError)}</span>
+        </div>
+      )}
+
+      {deliveryWarning && (
+        <div
+          className="rounded-[var(--qw-card-radius)] border p-4 text-sm"
+          style={{
+            background: 'rgba(234, 179, 8, 0.10)',
+            borderColor: 'rgba(234, 179, 8, 0.35)',
+            color: '#92400e',
+          }}
+        >
+          <strong className="block mb-1">Transport non attaché automatiquement</strong>
+          <span>
+            Le devis Odoo est créé correctement, mais l&apos;API UPS n&apos;a
+            pas pu calculer le tarif :{' '}
+            <em>{decodeURIComponent(deliveryWarning)}</em>.
+            <br />
+            Ajoute la ligne transport manuellement dans Odoo avant d&apos;envoyer
+            le devis au client.
+          </span>
         </div>
       )}
 
