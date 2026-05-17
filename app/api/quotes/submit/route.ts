@@ -15,6 +15,7 @@ const FROM_ADDRESS = 'Devis Oshibori <onboarding@resend.dev>';
 export async function POST(req: Request) {
   let payload: Omit<WizardState, 'attachmentFile'>;
   let file: File | null = null;
+  let draftId: string | null = null;
 
   try {
     const fd = await req.formData();
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
     payload = JSON.parse(raw);
     const f = fd.get('file');
     if (f instanceof File && f.size > 0) file = f;
+    const did = fd.get('draftId');
+    if (typeof did === 'string' && did.trim()) draftId = did.trim();
   } catch (err) {
     return NextResponse.json(
       { error: `payload invalide: ${(err as Error).message}` },
@@ -44,68 +47,107 @@ export async function POST(req: Request) {
   const fullName = `${payload.firstName} ${payload.lastName}`.trim();
 
   const supabase = createAdminClient();
-  const { data: inserted, error: dbError } = await supabase
-    .from('quote_requests')
-    .insert({
-      email: payload.email,
-      full_name: fullName || null,
-      company_name: payload.entrepriseName || null,
-      vat_number: payload.tvaFr || payload.tvaUe || null,
-      siret: payload.siret || null,
-      phone: payload.phone || null,
 
-      shipping_address: {
-        contact: payload.deliveryContactName || null,
-        street1: payload.deliveryStreet1 || null,
-        street2: payload.deliveryStreet2 || null,
-        postal_code: payload.deliveryPostalCode || null,
-        city: payload.deliveryCity || null,
-        state: payload.deliveryState || null,
-        country: payload.deliveryCountry || null,
-        carrier_phone: payload.carrierPhone || null,
-      },
-      billing_address: payload.billingSame
-        ? null
-        : {
-            street1: payload.billingStreet1 || null,
-            street2: payload.billingStreet2 || null,
-            postal_code: payload.billingPostalCode || null,
-            city: payload.billingCity || null,
-            country: payload.billingCountry || null,
-          },
+  // Si on a un draftId, on convertit la ligne draft existante en
+  // demande complète plutôt que de créer un doublon. Avantage : on
+  // garde le même ID UUID donc les éventuels liens / activité sont
+  // préservés. On vide aussi `last_saved_at` côté logique pour que
+  // l'admin voie clairement que c'est passé à "soumis".
+  const fields = {
+    email: payload.email,
+    full_name: fullName || null,
+    company_name: payload.entrepriseName || null,
+    vat_number: payload.tvaFr || payload.tvaUe || null,
+    siret: payload.siret || null,
+    phone: payload.phone || null,
 
-      product_type: payload.productType,
-      category: payload.category || null,
-      perso_level: payload.persoLevel || null,
-      grammage: payload.grammage || null,
-      matiere: payload.matiere || null,
-      packaging: payload.packagingId || null,
+    shipping_address: {
+      contact: payload.deliveryContactName || null,
+      street1: payload.deliveryStreet1 || null,
+      street2: payload.deliveryStreet2 || null,
+      postal_code: payload.deliveryPostalCode || null,
+      city: payload.deliveryCity || null,
+      state: payload.deliveryState || null,
+      country: payload.deliveryCountry || null,
+      carrier_phone: payload.carrierPhone || null,
+    },
+    billing_address: payload.billingSame
+      ? null
+      : {
+          street1: payload.billingStreet1 || null,
+          street2: payload.billingStreet2 || null,
+          postal_code: payload.billingPostalCode || null,
+          city: payload.billingCity || null,
+          country: payload.billingCountry || null,
+        },
 
-      quantity: payload.quantity || null,
-      brief: payload.brief || null,
-      file_url: file ? file.name : null,
+    product_type: payload.productType,
+    category: payload.category || null,
+    perso_level: payload.persoLevel || null,
+    grammage: payload.grammage || null,
+    matiere: payload.matiere || null,
+    packaging: payload.packagingId || null,
 
-      estimated_unit_price: unitPrice,
-      estimated_total: total,
+    quantity: payload.quantity || null,
+    brief: payload.brief || null,
+    file_url: file ? file.name : null,
 
-      internal_notes: payload.message || null,
-    })
-    .select('id')
-    .single();
+    estimated_unit_price: unitPrice,
+    estimated_total: total,
 
-  if (dbError) {
-    console.error('quote_requests insert error', dbError);
-    return NextResponse.json({ error: 'DB error' }, { status: 500 });
+    internal_notes: payload.message || null,
+    status: 'pending_review' as const,
+  };
+
+  let id: string | null = null;
+
+  // Si la requête vient d'un wizard qui a auto-sauvegardé en draft,
+  // on update la ligne existante au lieu d'insérer un doublon.
+  if (draftId) {
+    const { data: draft } = await supabase
+      .from('quote_requests')
+      .select('id')
+      .eq('draft_id', draftId)
+      .maybeSingle();
+    if (draft) {
+      const { error } = await supabase
+        .from('quote_requests')
+        .update(fields)
+        .eq('id', draft.id);
+      if (error) {
+        console.error('quote_requests update from draft error', error);
+        return NextResponse.json({ error: 'DB error' }, { status: 500 });
+      }
+      id = draft.id;
+    }
+  }
+
+  if (!id) {
+    const { data: inserted, error: dbError } = await supabase
+      .from('quote_requests')
+      .insert(fields)
+      .select('id')
+      .single();
+    if (dbError) {
+      console.error('quote_requests insert error', dbError);
+      return NextResponse.json({ error: 'DB error' }, { status: 500 });
+    }
+    id = inserted.id;
+  }
+
+  if (!id) {
+    // Shouldn't happen — both paths set id — but TS narrowing needs it.
+    return NextResponse.json({ error: 'inconnu' }, { status: 500 });
   }
 
   // Fire and forget — we don't fail the request if email fails (the row is saved).
   try {
-    await sendNotificationEmail({ payload, file, unitPrice, total, id: inserted.id });
+    await sendNotificationEmail({ payload, file, unitPrice, total, id });
   } catch (err) {
     console.error('Resend send error', err);
   }
 
-  return NextResponse.json({ id: inserted.id });
+  return NextResponse.json({ id });
 }
 
 interface NotifyArgs {

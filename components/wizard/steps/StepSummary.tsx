@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useWizard } from '../WizardProvider';
+import { clearDraftId, readExistingDraftId } from '../useDraftAutoSave';
 import { StepHeader } from './StepHeader';
 import {
   computeQuoteTotal,
@@ -29,6 +30,10 @@ export function StepSummary() {
     const { attachmentFile, ...rest } = state;
     fd.append('payload', JSON.stringify(rest));
     if (attachmentFile) fd.append('file', attachmentFile);
+    // Passe le draftId pour que /api/quotes/submit convertisse la ligne
+    // brouillon existante en demande finalisée (au lieu de créer un doublon).
+    const draftId = readExistingDraftId();
+    if (draftId) fd.append('draftId', draftId);
 
     try {
       const res = await fetch('/api/quotes/submit', { method: 'POST', body: fd });
@@ -37,6 +42,9 @@ export function StepSummary() {
         throw new Error(body.error || `Erreur ${res.status}`);
       }
       const { id } = (await res.json()) as { id: string };
+      // Soumission OK → on oublie le draftId pour qu'une future visite
+      // démarre un nouveau brouillon.
+      clearDraftId();
       window.location.href = `/thanks?id=${id}`;
     } catch (err) {
       setError((err as Error).message);

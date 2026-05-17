@@ -1,6 +1,7 @@
 'use client';
 
 import { WizardProvider, useWizard } from './WizardProvider';
+import { useDraftAutoSave } from './useDraftAutoSave';
 import { ProgressBar } from './ProgressBar';
 import { NavBar } from './NavBar';
 import { StepProfile } from './steps/StepProfile';
@@ -16,7 +17,10 @@ import { StepShipping } from './steps/StepShipping';
 import { StepSummary } from './steps/StepSummary';
 
 function WizardContent() {
-  const { currentStep } = useWizard();
+  const { currentStep, state } = useWizard();
+  // Auto-sauvegarde en brouillon dès qu'un email/téléphone/produit est
+  // renseigné. Tourne sur toutes les étapes (pas juste le résumé).
+  useDraftAutoSave(state);
 
   return (
     <div className="h-dvh flex flex-col bg-white overflow-hidden">
