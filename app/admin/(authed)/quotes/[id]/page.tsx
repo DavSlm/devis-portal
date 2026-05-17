@@ -246,19 +246,18 @@ export default async function QuoteRequestDetail({ params, searchParams }: PageP
             {editingConfig ? (
               <form action={updateProductConfig} className="space-y-2">
                 <input type="hidden" name="requestId" value={request.id} />
-                <Field label="Produit" name="product_type" defaultValue={request.product_type ?? ''} />
-                <Field label="Personnalisation" name="perso_level" defaultValue={request.perso_level ?? ''} />
+                <SelectField label="Produit" name="product_type" defaultValue={request.product_type} options={PRODUCT_TYPES} allowEmpty={false} />
+                <SelectField label="Personnalisation" name="perso_level" defaultValue={request.perso_level} options={PERSO_LEVELS} />
                 <Field label="Catégorie" name="category" defaultValue={request.category ?? ''} />
-                <Field label="Grammage" name="grammage" defaultValue={request.grammage ?? ''} />
-                <Field label="Matière" name="matiere" defaultValue={request.matiere ?? ''} />
+                <SelectField label="Grammage" name="grammage" defaultValue={request.grammage} options={GRAMMAGES} />
+                <SelectField label="Matière" name="matiere" defaultValue={request.matiere} options={MATIERES} />
                 <Field label="Emballage" name="packaging" defaultValue={request.packaging ?? ''} />
                 <Field label="Quantité" name="quantity" type="number" step="1" min="1" defaultValue={request.quantity ?? ''} />
                 <SaveButton>Enregistrer la configuration</SaveButton>
-                {request.odoo_order_id && (
-                  <p className="text-[11px] text-ink-soft text-center pt-1">
-                    Si le variant change, la ligne Odoo est recréée (pour relancer les onchange prix/taxes).
-                  </p>
-                )}
+                <p className="text-[11px] text-ink-soft text-center pt-1">
+                  Plateaux : laisse Personnalisation / Grammage / Matière vides.
+                  {request.odoo_order_id && ' Si le variant change, la ligne Odoo est recréée pour relancer les onchange prix/taxes.'}
+                </p>
               </form>
             ) : (
             <div className="space-y-2">
@@ -723,6 +722,42 @@ function Field({
     </div>
   );
 }
+
+function SelectField({
+  label,
+  name,
+  defaultValue,
+  options,
+  allowEmpty = true,
+}: {
+  label: string;
+  name: string;
+  defaultValue?: string | null;
+  options: ReadonlyArray<string>;
+  /** Si true, ajoute une option "—" en tête (par défaut, utile pour Plateaux). */
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-1 sm:gap-3 items-center">
+      <label htmlFor={name} className="text-xs uppercase tracking-[0.06em] text-ink-soft">
+        {label}
+      </label>
+      <select id={name} name={name} defaultValue={defaultValue ?? ''} className="qw-input">
+        {allowEmpty && <option value="">—</option>}
+        {options.map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+const PRODUCT_TYPES = ['Oshibori', 'Plateaux'] as const;
+const PERSO_LEVELS = ['Neutre', 'Semi-perso', 'Full perso'] as const;
+const GRAMMAGES = ['6 grammes', '10 grammes', '15 grammes'] as const;
+const MATIERES = ['100% Coton', '80% Bambou - 20% Coton'] as const;
 
 function SaveButton({ children }: { children: React.ReactNode }) {
   return (
