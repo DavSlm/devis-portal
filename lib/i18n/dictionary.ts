@@ -586,8 +586,8 @@ export const en: Translations = {
   },
   perso_level: {
     title: 'Which level of customization?',
-    subtitle: 'Plain stock, your logo, or fully bespoke packaging',
-    neutre_title: 'Plain Oshibori',
+    subtitle: 'Neutral stock, your logo, or fully bespoke packaging',
+    neutre_title: 'Neutral Oshibori',
     neutre_desc: 'Our standard range, ready to use, unbranded.',
     neutre_chip_stock: 'In stock',
     neutre_chip_delay: '3 business-day lead time',
@@ -600,7 +600,7 @@ export const en: Translations = {
   },
   category_neutre: {
     title: 'Select weight',
-    subtitle: 'Our Plain Oshibori range',
+    subtitle: 'Our Neutral Oshibori range',
     fifteen_g: '15 grams',
     ten_g: '10 grams',
     six_g: '6 grams',
