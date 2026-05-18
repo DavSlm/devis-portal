@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
+import { LogoMockupPreview } from '../LogoMockupPreview';
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.ai,.eps,.svg,.zip';
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -74,6 +75,8 @@ export function StepBrief() {
           </p>
         </div>
       </div>
+
+      <LogoMockupPreview state={state} />
 
       <div className="space-y-2">
         <label className="qw-label">
