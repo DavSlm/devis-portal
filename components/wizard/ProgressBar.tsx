@@ -1,7 +1,6 @@
 'use client';
 
 import { useWizard } from './WizardProvider';
-import { STEP_LABELS } from './flow';
 import { useT } from '@/lib/i18n/Provider';
 
 export function ProgressBar() {
@@ -13,7 +12,7 @@ export function ProgressBar() {
     <div className="w-full">
       <div className="flex items-baseline justify-between mb-2">
         <span className="text-xs uppercase tracking-[0.08em] text-gold-dark font-semibold">
-          {STEP_LABELS[currentStep]}
+          {t(`step_labels.${currentStep}`)}
         </span>
         <span className="text-xs text-ink-soft">
           {t('sidebar.progress_step', { current: currentIndex + 1, total: totalSteps })}

@@ -2,79 +2,84 @@
 
 import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
-import { PickCard } from '../PickCard';
+import { PickCard, type InfoChip } from '../PickCard';
 import { ClientExamples } from '../ClientExamples';
 import { CDN } from '@/lib/pricing/data';
+import { useT } from '@/lib/i18n/Provider';
+import { RulerIcon, LayersIcon, MinusIcon, MinimizeIcon } from '../icons';
 import type { Grammage } from '@/types/wizard';
 
 interface Option {
   value: Grammage;
-  /** Image utilisée en mode neutre (gamme catalogue actuelle). */
   imgNeutre: string;
-  /** Image semi-perso — TODO : à fournir, montrer un emballage marqué. */
   imgSemi: string;
-  /** Image full perso — TODO : à fournir, montrer un emballage 100% perso. */
   imgFull: string;
   title: string;
-  desc: string;
+  infoChips: InfoChip[];
   chip?: string;
 }
 
-const ALL: Option[] = [
-  {
-    value: '15 grammes',
-    imgNeutre: `${CDN}Oshibori_15_grammes_2026.png?v=1765206540`,
-    imgSemi: 'TODO',
-    imgFull: 'TODO',
-    title: '15 grammes',
-    desc: '22 × 22,5 cm · plus épais',
-    chip: 'À partir de 18 000 Oshibori',
-  },
-  {
-    value: '10 grammes',
-    imgNeutre: `${CDN}10groshi.png?v=1765206540`,
-    imgSemi: 'TODO',
-    imgFull: 'TODO',
-    title: '10 grammes',
-    desc: '22 × 22,5 cm · plus fin',
-    chip: 'À partir de 18 000 Oshibori',
-  },
-  {
-    value: '6 grammes',
-    imgNeutre: `${CDN}6g.png?v=1765206540`,
-    imgSemi: 'TODO',
-    imgFull: 'TODO',
-    title: '6 grammes',
-    desc: '19 × 18 cm · plus petit',
-    chip: 'À partir de 30 000 Oshibori',
-  },
-];
-
 export function StepGrammage() {
   const { state, pick } = useWizard();
+  const { t } = useT();
   const isFull = state.persoLevel === 'Full perso';
   const isSemi = state.persoLevel === 'Semi-perso';
 
-  // Semi only allows 15g and 10g; Full allows all three.
+  const ALL: Option[] = [
+    {
+      value: '15 grammes',
+      imgNeutre: `${CDN}Oshibori_15_grammes_2026.png?v=1765206540`,
+      imgSemi: 'TODO',
+      imgFull: 'TODO',
+      title: t('category_neutre.fifteen_g'),
+      infoChips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_15_10'), variant: 'cream' },
+        { icon: <LayersIcon />, label: t('category_neutre.thicker') },
+      ],
+      chip: t('grammage.from_18000'),
+    },
+    {
+      value: '10 grammes',
+      imgNeutre: `${CDN}10groshi.png?v=1765206540`,
+      imgSemi: 'TODO',
+      imgFull: 'TODO',
+      title: t('category_neutre.ten_g'),
+      infoChips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_15_10'), variant: 'cream' },
+        { icon: <MinusIcon />, label: t('category_neutre.thinner') },
+      ],
+      chip: t('grammage.from_18000'),
+    },
+    {
+      value: '6 grammes',
+      imgNeutre: `${CDN}6g.png?v=1765206540`,
+      imgSemi: 'TODO',
+      imgFull: 'TODO',
+      title: t('category_neutre.six_g'),
+      infoChips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_6'), variant: 'cream' },
+        { icon: <MinimizeIcon />, label: t('category_neutre.compact') },
+      ],
+      chip: t('grammage.from_30000'),
+    },
+  ];
+
   const baseOptions = isSemi
     ? ALL.filter((o) => o.value === '15 grammes' || o.value === '10 grammes').map(
-        (o) => ({ ...o, chip: 'À partir de 50 Oshibori' }),
+        (o) => ({ ...o, chip: t('grammage.from_50') }),
       )
     : ALL;
 
-  // Sélectionne la bonne image selon le niveau de perso.
   const options = baseOptions.map((o) => ({
     ...o,
     img: isFull ? o.imgFull : isSemi ? o.imgSemi : o.imgNeutre,
   }));
 
-  const subtitle = isFull
-    ? 'Personnalisation Complète : trois formats au choix'
-    : 'Semi Personnalisation : 15 ou 10 grammes';
+  const subtitle = isFull ? t('grammage.subtitle_full') : t('grammage.subtitle_semi');
 
   return (
     <div className="space-y-8">
-      <StepHeader title="Sélection du grammage" subtitle={subtitle} />
+      <StepHeader title={t('grammage.title')} subtitle={subtitle} />
 
       <div
         className={`grid grid-cols-1 gap-4 ${
@@ -87,7 +92,7 @@ export function StepGrammage() {
             imageUrl={o.img}
             imageAlt={o.title}
             title={o.title}
-            desc={o.desc}
+            infoChips={o.infoChips}
             ghostChips={o.chip ? [o.chip] : undefined}
             selected={state.grammage === o.value}
             onClick={() =>

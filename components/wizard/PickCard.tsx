@@ -5,6 +5,8 @@ import type { ReactNode } from 'react';
 export interface InfoChip {
   icon: ReactNode;
   label: string;
+  /** 'cream' = info principale (fond beige), 'white' = info secondaire. Défaut : 'white'. */
+  variant?: 'cream' | 'white';
 }
 
 interface PickCardProps {
@@ -89,7 +91,7 @@ export function PickCard({
               key={`${c.label}-${i}`}
               className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-medium text-ink-soft"
               style={{
-                background: '#fff',
+                background: c.variant === 'cream' ? 'var(--qw-cream)' : '#fff',
                 border: '1px solid var(--qw-cream-strong)',
               }}
             >

@@ -10,7 +10,7 @@
  */
 
 import { useWizard } from './WizardProvider';
-import { STEP_LABELS, type StepId } from './flow';
+import { type StepId } from './flow';
 import { ProgressBar } from './ProgressBar';
 import { useT } from '@/lib/i18n/Provider';
 import type { WizardState } from '@/types/wizard';
@@ -81,7 +81,7 @@ export function WizardSidebar() {
             idx < currentIndex ? 'done' : idx === currentIndex ? 'current' : 'upcoming';
           const summary = summaryFor(step, state);
           const clickable = idx <= currentIndex;
-          const label = STEP_LABELS[step];
+          const label = t(`step_labels.${step}`);
 
           return (
             <li key={step}>

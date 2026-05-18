@@ -4,13 +4,14 @@ import { useEffect } from 'react';
 import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
 import { isValidSiret, isValidVatEu, isValidVatFr } from '@/lib/validation/identifiers';
+import { useT } from '@/lib/i18n/Provider';
 
 export function StepShipping() {
   const { state, set } = useWizard();
+  const { t } = useT();
   const isPro = state.profile === 'professionnel';
   const isFrance = (state.country ?? '').toLowerCase() === 'france';
 
-  // Pre-fill delivery contact name with entreprise / full name on first arrival.
   useEffect(() => {
     if (state.deliveryContactName) return;
     const guess = isPro
@@ -26,19 +27,19 @@ export function StepShipping() {
 
   return (
     <div className="space-y-8">
-      <StepHeader title="Livraison & facturation" subtitle="Où et comment vous livrer ?" />
+      <StepHeader title={t('shipping.title')} subtitle={t('shipping.subtitle')} />
 
-      <Section title="Adresse de livraison">
-        <Field label="Nom du contact" hint="optionnel">
+      <Section title={t('shipping.delivery_title')}>
+        <Field label={t('shipping.contact_name')} hint={t('shipping.optional')}>
           <input
             type="text"
             className="qw-input"
-            placeholder="Nom à mentionner sur la livraison"
+            placeholder={t('shipping.contact_name_hint')}
             value={state.deliveryContactName}
             onChange={(e) => set({ deliveryContactName: e.target.value })}
           />
         </Field>
-        <Field label="Rue 1" required>
+        <Field label={t('shipping.street1')} required>
           <input
             type="text"
             className="qw-input"
@@ -47,7 +48,7 @@ export function StepShipping() {
             onChange={(e) => set({ deliveryStreet1: e.target.value })}
           />
         </Field>
-        <Field label="Rue 2" hint="optionnel">
+        <Field label={t('shipping.street2')} hint={t('shipping.optional')}>
           <input
             type="text"
             className="qw-input"
@@ -57,7 +58,7 @@ export function StepShipping() {
           />
         </Field>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Field label="Code postal" required>
+          <Field label={t('shipping.postal_code')} required>
             <input
               type="text"
               className="qw-input"
@@ -66,7 +67,7 @@ export function StepShipping() {
               onChange={(e) => set({ deliveryPostalCode: e.target.value })}
             />
           </Field>
-          <Field label="Ville" required>
+          <Field label={t('shipping.city')} required>
             <input
               type="text"
               className="qw-input"
@@ -75,7 +76,7 @@ export function StepShipping() {
               onChange={(e) => set({ deliveryCity: e.target.value })}
             />
           </Field>
-          <Field label="Région / État" hint="optionnel">
+          <Field label={t('shipping.state')} hint={t('shipping.optional')}>
             <input
               type="text"
               className="qw-input"
@@ -85,7 +86,7 @@ export function StepShipping() {
             />
           </Field>
         </div>
-        <Field label="Pays" required>
+        <Field label={t('shipping.country')} required>
           <input
             type="text"
             className="qw-input"
@@ -94,11 +95,11 @@ export function StepShipping() {
             onChange={(e) => set({ deliveryCountry: e.target.value })}
           />
         </Field>
-        <Field label="Téléphone transporteur" hint="optionnel">
+        <Field label={t('shipping.carrier_phone')} hint={t('shipping.optional')}>
           <input
             type="tel"
             className="qw-input"
-            placeholder="Pour planifier la livraison"
+            placeholder={t('shipping.carrier_phone_hint')}
             value={state.carrierPhone}
             onChange={(e) => set({ carrierPhone: e.target.value })}
           />
@@ -112,12 +113,12 @@ export function StepShipping() {
           onChange={(e) => set({ billingSame: e.target.checked })}
           className="w-4 h-4 accent-[var(--qw-gold)]"
         />
-        <span className="text-sm">Adresse de facturation identique à la livraison</span>
+        <span className="text-sm">{t('shipping.billing_same')}</span>
       </label>
 
       {!state.billingSame && (
-        <Section title="Adresse de facturation">
-          <Field label="Rue 1" required>
+        <Section title={t('shipping.billing_title')}>
+          <Field label={t('shipping.street1')} required>
             <input
               type="text"
               className="qw-input"
@@ -125,7 +126,7 @@ export function StepShipping() {
               onChange={(e) => set({ billingStreet1: e.target.value })}
             />
           </Field>
-          <Field label="Rue 2" hint="optionnel">
+          <Field label={t('shipping.street2')} hint={t('shipping.optional')}>
             <input
               type="text"
               className="qw-input"
@@ -134,7 +135,7 @@ export function StepShipping() {
             />
           </Field>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Code postal" required>
+            <Field label={t('shipping.postal_code')} required>
               <input
                 type="text"
                 className="qw-input"
@@ -142,7 +143,7 @@ export function StepShipping() {
                 onChange={(e) => set({ billingPostalCode: e.target.value })}
               />
             </Field>
-            <Field label="Ville" required>
+            <Field label={t('shipping.city')} required>
               <input
                 type="text"
                 className="qw-input"
@@ -151,7 +152,7 @@ export function StepShipping() {
               />
             </Field>
           </div>
-          <Field label="Pays" required>
+          <Field label={t('shipping.country')} required>
             <input
               type="text"
               className="qw-input"
@@ -163,40 +164,40 @@ export function StepShipping() {
       )}
 
       {isPro && (
-        <Section title="Identifiants entreprise">
+        <Section title={t('shipping.company_id_title')}>
           {isFrance ? (
             <>
-              <Field label="SIRET" hint="14 chiffres — optionnel">
+              <Field label={t('shipping.siret')} hint={t('shipping.siret_hint')}>
                 <input
                   type="text"
                   className={`qw-input ${siretInvalid ? 'is-invalid' : ''}`}
-                  placeholder="000 000 000 00000"
+                  placeholder={t('shipping.siret_placeholder')}
                   value={state.siret}
                   onChange={(e) => set({ siret: e.target.value })}
                 />
                 {siretInvalid && (
                   <span className="text-xs text-[var(--qw-error)] mt-1 block">
-                    Format invalide — attendu 14 chiffres.
+                    {t('shipping.siret_invalid')}
                   </span>
                 )}
               </Field>
-              <Field label="N° TVA intracommunautaire" hint="FR + 11 caractères — optionnel">
+              <Field label={t('shipping.vat')} hint={t('shipping.vat_hint')}>
                 <input
                   type="text"
                   className={`qw-input ${vatFrInvalid ? 'is-invalid' : ''}`}
-                  placeholder="FR12345678901"
+                  placeholder={t('shipping.vat_placeholder')}
                   value={state.tvaFr}
                   onChange={(e) => set({ tvaFr: e.target.value })}
                 />
                 {vatFrInvalid && (
                   <span className="text-xs text-[var(--qw-error)] mt-1 block">
-                    Format TVA française invalide.
+                    {t('shipping.vat_fr_invalid')}
                   </span>
                 )}
               </Field>
             </>
           ) : (
-            <Field label="N° TVA intracommunautaire" hint="optionnel">
+            <Field label={t('shipping.vat')} hint={t('shipping.optional')}>
               <input
                 type="text"
                 className={`qw-input ${vatEuInvalid ? 'is-invalid' : ''}`}
@@ -206,7 +207,7 @@ export function StepShipping() {
               />
               {vatEuInvalid && (
                 <span className="text-xs text-[var(--qw-error)] mt-1 block">
-                  Format TVA UE invalide.
+                  {t('shipping.vat_ue_invalid')}
                 </span>
               )}
             </Field>
@@ -214,11 +215,11 @@ export function StepShipping() {
         </Section>
       )}
 
-      <Section title="Message complémentaire" optional>
+      <Section title={t('shipping.message')} optionalLabel={t('shipping.message_optional')}>
         <textarea
           className="qw-input min-h-24"
           rows={4}
-          placeholder="Informations utiles à la préparation de votre devis…"
+          placeholder={t('shipping.message_placeholder')}
           value={state.message}
           onChange={(e) => set({ message: e.target.value })}
         />
@@ -229,19 +230,19 @@ export function StepShipping() {
 
 function Section({
   title,
-  optional,
+  optionalLabel,
   children,
 }: {
   title: string;
-  optional?: boolean;
+  optionalLabel?: string;
   children: React.ReactNode;
 }) {
   return (
     <section className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-[var(--qw-cream)]/30 p-5 sm:p-6 space-y-4">
       <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-gold-dark">
         {title}
-        {optional && (
-          <span className="ml-2 text-ink-soft font-normal normal-case">— optionnel</span>
+        {optionalLabel && (
+          <span className="ml-2 text-ink-soft font-normal normal-case">{optionalLabel}</span>
         )}
       </h3>
       {children}

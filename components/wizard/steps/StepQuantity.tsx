@@ -22,6 +22,7 @@ import {
   LeafIcon,
   SparkleIcon,
 } from '../icons';
+import { useT } from '@/lib/i18n/Provider';
 
 interface Tier {
   /** Quantité minimale (en Oshibori ou plateaux selon contexte) */
@@ -78,6 +79,9 @@ function posToQty(pos: number, min: number, max: number): number {
 
 export function StepQuantity() {
   const { state, set } = useWizard();
+  const { t, locale } = useT();
+  const fmtNum = (n: number) =>
+    n.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
 
   const rule = useMemo(() => quantityRule(state), [state]);
   const tiers = useMemo(() => buildTiers(state), [state]);
@@ -150,7 +154,7 @@ export function StepQuantity() {
 
   return (
     <div className="space-y-8">
-      <StepHeader title="Quantité souhaitée" subtitle={rule.label} />
+      <StepHeader title={t('quantity.title')} subtitle={rule.label} />
 
       {showDluShelf && (
         <p
@@ -160,9 +164,8 @@ export function StepQuantity() {
             borderLeft: '3px solid var(--qw-gold)',
           }}
         >
-          <strong className="text-gold-dark font-semibold">Bon à savoir :</strong> la DLU des
-          Oshibori est de 2 ans après production. Pour optimiser votre prix unitaire,
-          calculez une estimation de votre consommation sur 2 ans.
+          <strong className="text-gold-dark font-semibold">{t('quantity.good_to_know')}</strong>{' '}
+          {t('quantity.dlu_note')}
         </p>
       )}
 
@@ -170,12 +173,12 @@ export function StepQuantity() {
       <div className="space-y-3">
         <div className="flex items-baseline justify-between">
           <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-soft">
-            Quantité
+            {t('quantity.label')}
           </span>
           <span className="font-semibold text-ink text-lg tabular-nums">
-            {(state.quantity ?? sliderBounds.min).toLocaleString('fr-FR')}{' '}
+            {fmtNum(state.quantity ?? sliderBounds.min)}{' '}
             <span className="text-xs text-ink-soft font-normal">
-              {isPlateaux ? 'plateaux' : 'unités'}
+              {isPlateaux ? t('quantity.plateaux') : t('quantity.units')}
             </span>
           </span>
         </div>
@@ -192,7 +195,7 @@ export function StepQuantity() {
               const raw = posToQty(pos, sliderBounds.min, sliderBounds.max);
               set({ quantity: snap(raw, rule.multiple, sliderBounds.min, sliderBounds.max) });
             }}
-            aria-label="Sélecteur de quantité"
+            aria-label={t('quantity.aria_select')}
             className="qw-range w-full"
           />
           {/* Ticks — positionnés en échelle log pour ne pas se chevaucher */}
@@ -211,7 +214,7 @@ export function StepQuantity() {
                     v === state.quantity ? 'text-gold-dark font-semibold' : 'text-ink-soft'
                   }`}
                 >
-                  {v.toLocaleString('fr-FR')}
+                  {fmtNum(v)}
                 </span>
               </span>
             ))}
@@ -224,7 +227,7 @@ export function StepQuantity() {
         <button
           type="button"
           onClick={dec}
-          aria-label="Diminuer"
+          aria-label={t('quantity.decrease')}
           className="w-11 h-11 rounded-full border border-[var(--qw-border-soft)] text-xl text-ink hover:bg-[var(--qw-cream)] transition-colors"
         >
           −
@@ -248,7 +251,7 @@ export function StepQuantity() {
         <button
           type="button"
           onClick={inc}
-          aria-label="Augmenter"
+          aria-label={t('quantity.increase')}
           className="w-11 h-11 rounded-full border border-[var(--qw-border-soft)] text-xl text-ink hover:bg-[var(--qw-cream)] transition-colors"
         >
           +
@@ -259,15 +262,15 @@ export function StepQuantity() {
       {tiers.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-soft">
-            Paliers volume
+            {t('quantity.tiers_title')}
           </h3>
           <div className="rounded-[var(--qw-input-radius)] border border-[var(--qw-cream-strong)] overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-[11px] uppercase tracking-[0.06em] text-ink-soft bg-[var(--qw-cream)]/40">
-                  <th className="text-left font-medium px-4 py-2.5">À partir de</th>
-                  <th className="text-left font-medium px-4 py-2.5">Prix unitaire</th>
-                  <th className="text-right font-medium px-4 py-2.5">Économie</th>
+                  <th className="text-left font-medium px-4 py-2.5">{t('quantity.th_from')}</th>
+                  <th className="text-left font-medium px-4 py-2.5">{t('quantity.th_unit')}</th>
+                  <th className="text-right font-medium px-4 py-2.5">{t('quantity.th_savings')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,7 +305,7 @@ export function StepQuantity() {
                               style={{ background: 'var(--qw-gold)' }}
                             />
                           )}
-                          ≥ {t.min.toLocaleString('fr-FR')}
+                          ≥ {fmtNum(t.min)}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 tabular-nums">
@@ -318,9 +321,7 @@ export function StepQuantity() {
               </tbody>
             </table>
           </div>
-          <p className="text-[11px] italic text-ink-soft">
-            Prix HT, EXW France · transport en sus, devis détaillé sous 24 h.
-          </p>
+          <p className="text-[11px] italic text-ink-soft">{t('quantity.prices_note')}</p>
         </div>
       )}
 
@@ -341,50 +342,44 @@ export function StepQuantity() {
   );
 }
 
-interface Engagement {
-  icon: React.ReactNode;
-  title: string;
-  desc: string;
-}
-
-const ENGAGEMENTS: Engagement[] = [
-  {
-    icon: <FlagFrIcon width={20} height={20} />,
-    title: 'Fabriqué en France',
-    desc: 'Production et conditionnement intégralement français.',
-  },
-  {
-    icon: <AwardIcon width={20} height={20} />,
-    title: 'Usine certifiée ISO 22716',
-    desc: 'Bonnes pratiques de fabrication cosmétique (BPF européennes).',
-  },
-  {
-    icon: <LeafIcon width={20} height={20} />,
-    title: 'Matières naturelles',
-    desc: '100 % coton ou 80 % bambou / 20 % coton — doux et absorbants.',
-  },
-  {
-    icon: <DropletIcon width={20} height={20} />,
-    title: 'Testé dermatologiquement',
-    desc: 'Hypoallergénique, sans alcool, validé pour toutes les peaux.',
-  },
-  {
-    icon: <SparkleIcon width={20} height={20} />,
-    title: 'Parfums signature',
-    desc: 'Fragrances exclusives haut de gamme, créées pour Oshibori Concept.',
-  },
-  {
-    icon: <CalendarIcon width={20} height={20} />,
-    title: 'DLU 2 ans · lot tracé',
-    desc: 'Traçabilité complète, sécurité garantie pour vos clients.',
-  },
-];
-
 function Advantages() {
+  const { t } = useT();
+  const ENGAGEMENTS = [
+    {
+      icon: <FlagFrIcon width={20} height={20} />,
+      title: t('quantity.eng_made_title'),
+      desc: t('quantity.eng_made_desc'),
+    },
+    {
+      icon: <AwardIcon width={20} height={20} />,
+      title: t('quantity.eng_iso_title'),
+      desc: t('quantity.eng_iso_desc'),
+    },
+    {
+      icon: <LeafIcon width={20} height={20} />,
+      title: t('quantity.eng_natural_title'),
+      desc: t('quantity.eng_natural_desc'),
+    },
+    {
+      icon: <DropletIcon width={20} height={20} />,
+      title: t('quantity.eng_derm_title'),
+      desc: t('quantity.eng_derm_desc'),
+    },
+    {
+      icon: <SparkleIcon width={20} height={20} />,
+      title: t('quantity.eng_scent_title'),
+      desc: t('quantity.eng_scent_desc'),
+    },
+    {
+      icon: <CalendarIcon width={20} height={20} />,
+      title: t('quantity.eng_trace_title'),
+      desc: t('quantity.eng_trace_desc'),
+    },
+  ];
   return (
     <section className="pt-6 border-t border-[var(--qw-cream-strong)] space-y-4">
       <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
-        Nos engagements
+        {t('quantity.engagements_title')}
       </h3>
       <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 list-none">
         {ENGAGEMENTS.map((e) => (

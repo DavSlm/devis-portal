@@ -10,11 +10,16 @@ import {
   isPlateauxCategory,
   priceLabelForQuantity,
 } from '@/lib/pricing';
+import { useT } from '@/lib/i18n/Provider';
 
 export function StepSummary() {
   const { state } = useWizard();
+  const { t, locale } = useT();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const fmtNum = (n: number) =>
+    n.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
 
   const { total, unitPrice } = computeQuoteTotal(state);
   const unitLabel = priceLabelForQuantity(state, state.quantity);
@@ -25,13 +30,9 @@ export function StepSummary() {
     setError(null);
 
     const fd = new FormData();
-    // We send the whole state as a JSON blob plus the file separately,
-    // because FormData handles the binary natively.
     const { attachmentFile, ...rest } = state;
     fd.append('payload', JSON.stringify(rest));
     if (attachmentFile) fd.append('file', attachmentFile);
-    // Passe le draftId pour que /api/quotes/submit convertisse la ligne
-    // brouillon existante en demande finalisée (au lieu de créer un doublon).
     const draftId = readExistingDraftId();
     if (draftId) fd.append('draftId', draftId);
 
@@ -39,11 +40,9 @@ export function StepSummary() {
       const res = await fetch('/api/quotes/submit', { method: 'POST', body: fd });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Erreur ${res.status}`);
+        throw new Error(body.error || `${t('summary.error')} ${res.status}`);
       }
       const { id } = (await res.json()) as { id: string };
-      // Soumission OK → on oublie le draftId pour qu'une future visite
-      // démarre un nouveau brouillon.
       clearDraftId();
       window.location.href = `/thanks?id=${id}`;
     } catch (err) {
@@ -54,67 +53,65 @@ export function StepSummary() {
 
   return (
     <div className="space-y-8">
-      <StepHeader
-        title="Récapitulatif"
-        subtitle="Vérifiez votre demande avant envoi"
-      />
+      <StepHeader title={t('summary.title')} subtitle={t('summary.subtitle')} />
 
-      <Block title="Contact">
-        <Row label="Type" value={state.profile === 'professionnel' ? 'Entreprise' : 'Particulier'} />
-        {state.entrepriseName && <Row label="Entreprise" value={state.entrepriseName} />}
-        <Row label="Nom" value={`${state.firstName} ${state.lastName}`} />
-        <Row label="Email" value={state.email} />
-        <Row label="Téléphone" value={state.phone} />
-        {state.country && <Row label="Pays" value={state.country} />}
+      <Block title={t('summary.contact')}>
+        <Row
+          label={t('summary.type')}
+          value={state.profile === 'professionnel' ? t('profile.pro') : t('profile.particulier')}
+        />
+        {state.entrepriseName && <Row label={t('profile.company_name')} value={state.entrepriseName} />}
+        <Row label={t('summary.name')} value={`${state.firstName} ${state.lastName}`} />
+        <Row label={t('profile.email')} value={state.email} />
+        <Row label={t('summary.phone')} value={state.phone} />
+        {state.country && <Row label={t('profile.country')} value={state.country} />}
       </Block>
 
-      <Block title="Produit">
-        <Row label="Gamme" value={state.productType ?? '—'} />
-        {state.persoLevel && <Row label="Personnalisation" value={state.persoLevel} />}
-        {state.category && <Row label="Catégorie" value={state.category} />}
-        {state.grammage && <Row label="Grammage" value={state.grammage} />}
-        {state.matiere && <Row label="Matière" value={state.matiere} />}
-        {state.packaging && <Row label="Emballage" value={state.packaging} />}
+      <Block title={t('summary.product')}>
+        <Row label={t('summary.range')} value={state.productType ?? '—'} />
+        {state.persoLevel && <Row label={t('summary.perso')} value={state.persoLevel} />}
+        {state.category && <Row label={t('summary.category')} value={state.category} />}
+        {state.grammage && <Row label={t('summary.grammage')} value={state.grammage} />}
+        {state.matiere && <Row label={t('summary.matiere')} value={state.matiere} />}
+        {state.packaging && <Row label={t('summary.packaging')} value={state.packaging} />}
       </Block>
 
       {(state.brief || state.fileName) && (
-        <Block title="Brief">
-          {state.fileName && <Row label="Fichier" value={state.fileName} />}
-          {state.brief && <Row label="Description" value={state.brief} multiline />}
+        <Block title={t('summary.brief')}>
+          {state.fileName && <Row label={t('summary.file')} value={state.fileName} />}
+          {state.brief && <Row label={t('summary.description')} value={state.brief} multiline />}
         </Block>
       )}
 
-      <Block title="Quantité & estimation">
+      <Block title={t('summary.quantity_estimate')}>
         <Row
-          label="Quantité"
+          label={t('summary.quantity')}
           value={
             state.quantity
-              ? `${state.quantity.toLocaleString('fr-FR')} ${
-                  isPlateaux ? 'plateaux' : 'Oshibori'
+              ? `${fmtNum(state.quantity)} ${
+                  isPlateaux ? t('quantity.plateaux') : 'Oshibori'
                 }`
               : '—'
           }
         />
-        {unitLabel && <Row label="Prix unitaire estimé" value={unitLabel} />}
+        {unitLabel && <Row label={t('summary.unit_price_est')} value={unitLabel} />}
         {total && unitPrice && (
           <Row
-            label="Total estimé HT"
+            label={t('summary.total_ht_est')}
             value={
               <span className="font-semibold text-gold-dark">{formatEuro(total)}</span>
             }
           />
         )}
-        <p className="text-xs italic text-ink-soft mt-2">
-          Estimation indicative — un devis détaillé vous sera envoyé sous 24 h.
-        </p>
+        <p className="text-xs italic text-ink-soft mt-2">{t('summary.estimate_note')}</p>
       </Block>
 
-      <Block title="Livraison">
+      <Block title={t('summary.delivery')}>
         {state.deliveryContactName && (
-          <Row label="Contact" value={state.deliveryContactName} />
+          <Row label={t('summary.contact_label')} value={state.deliveryContactName} />
         )}
         <Row
-          label="Adresse"
+          label={t('summary.address')}
           value={[
             state.deliveryStreet1,
             state.deliveryStreet2,
@@ -125,13 +122,13 @@ export function StepSummary() {
             .filter(Boolean)
             .join(', ')}
         />
-        {state.carrierPhone && <Row label="Tél. transporteur" value={state.carrierPhone} />}
+        {state.carrierPhone && <Row label={t('summary.carrier_phone')} value={state.carrierPhone} />}
       </Block>
 
       {!state.billingSame && (
-        <Block title="Facturation">
+        <Block title={t('summary.billing')}>
           <Row
-            label="Adresse"
+            label={t('summary.address')}
             value={[
               state.billingStreet1,
               state.billingStreet2,
@@ -145,15 +142,15 @@ export function StepSummary() {
       )}
 
       {(state.siret || state.tvaFr || state.tvaUe) && (
-        <Block title="Identifiants">
-          {state.siret && <Row label="SIRET" value={state.siret} />}
-          {state.tvaFr && <Row label="TVA FR" value={state.tvaFr} />}
-          {state.tvaUe && <Row label="TVA UE" value={state.tvaUe} />}
+        <Block title={t('summary.ids')}>
+          {state.siret && <Row label={t('shipping.siret')} value={state.siret} />}
+          {state.tvaFr && <Row label={t('summary.vat_fr')} value={state.tvaFr} />}
+          {state.tvaUe && <Row label={t('summary.vat_ue')} value={state.tvaUe} />}
         </Block>
       )}
 
       {state.message && (
-        <Block title="Message">
+        <Block title={t('summary.message')}>
           <Row label="" value={state.message} multiline />
         </Block>
       )}
@@ -178,11 +175,9 @@ export function StepSummary() {
           disabled={submitting}
           className="px-8 py-3 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:opacity-60 disabled:cursor-not-allowed transition-all"
         >
-          {submitting ? 'Envoi en cours…' : 'Envoyer ma demande de devis'}
+          {submitting ? t('summary.sending') : t('summary.submit')}
         </button>
-        <p className="text-xs text-ink-soft mt-3">
-          Nous revenons vers vous sous 24 h ouvrées avec votre devis détaillé.
-        </p>
+        <p className="text-xs text-ink-soft mt-3">{t('summary.after_note')}</p>
       </div>
     </div>
   );

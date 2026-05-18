@@ -4,6 +4,7 @@ import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
 import { PickCard, type InfoChip } from '../PickCard';
 import { CDN } from '@/lib/pricing/data';
+import { useT } from '@/lib/i18n/Provider';
 import {
   LayersIcon,
   LeafIcon,
@@ -13,60 +14,61 @@ import {
   RulerIcon,
 } from '../icons';
 
-interface Variant {
-  category: string;
-  grammage: '15 grammes' | '10 grammes' | '6 grammes';
-  img: string;
-  title: string;
-  chips: InfoChip[];
-}
-
-const VARIANTS: Variant[] = [
-  {
-    category: 'Oshibori Neutres 15 grammes',
-    grammage: '15 grammes',
-    img: `${CDN}Oshibori_15_grammes_2026.png?v=1765206540`,
-    title: '15 grammes',
-    chips: [
-      { icon: <RulerIcon />, label: '22 × 22,5 cm' },
-      { icon: <LayersIcon />, label: 'Plus épais' },
-      { icon: <PackageIcon />, label: '6 emballages' },
-      { icon: <LeafIcon />, label: 'Coton ou bambou' },
-    ],
-  },
-  {
-    category: 'Oshibori Neutres 10 grammes',
-    grammage: '10 grammes',
-    img: `${CDN}10groshi.png?v=1765206540`,
-    title: '10 grammes',
-    chips: [
-      { icon: <RulerIcon />, label: '22 × 22,5 cm' },
-      { icon: <MinusIcon />, label: 'Plus fin' },
-      { icon: <PackageIcon />, label: '2 emballages' },
-      { icon: <LeafIcon />, label: '100 % coton' },
-    ],
-  },
-  {
-    category: 'Oshibori Neutres 6 grammes',
-    grammage: '6 grammes',
-    img: `${CDN}6g.png?v=1765206540`,
-    title: '6 grammes',
-    chips: [
-      { icon: <RulerIcon />, label: '19 × 18 cm' },
-      { icon: <MinimizeIcon />, label: 'Format compact' },
-      { icon: <LeafIcon />, label: '100 % coton' },
-    ],
-  },
-];
-
 export function StepCategoryNeutre() {
   const { state, pick } = useWizard();
+  const { t } = useT();
+
+  interface Variant {
+    category: string;
+    grammage: '15 grammes' | '10 grammes' | '6 grammes';
+    img: string;
+    title: string;
+    chips: InfoChip[];
+  }
+
+  const VARIANTS: Variant[] = [
+    {
+      category: 'Oshibori Neutres 15 grammes',
+      grammage: '15 grammes',
+      img: `${CDN}Oshibori_15_grammes_2026.png?v=1765206540`,
+      title: t('category_neutre.fifteen_g'),
+      chips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_15_10'), variant: 'cream' },
+        { icon: <LayersIcon />, label: t('category_neutre.thicker') },
+        { icon: <PackageIcon />, label: t('category_neutre.six_packs') },
+        { icon: <LeafIcon />, label: t('category_neutre.cotton_or_bamboo') },
+      ],
+    },
+    {
+      category: 'Oshibori Neutres 10 grammes',
+      grammage: '10 grammes',
+      img: `${CDN}10groshi.png?v=1765206540`,
+      title: t('category_neutre.ten_g'),
+      chips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_15_10'), variant: 'cream' },
+        { icon: <MinusIcon />, label: t('category_neutre.thinner') },
+        { icon: <PackageIcon />, label: t('category_neutre.two_packs') },
+        { icon: <LeafIcon />, label: t('category_neutre.full_cotton') },
+      ],
+    },
+    {
+      category: 'Oshibori Neutres 6 grammes',
+      grammage: '6 grammes',
+      img: `${CDN}6g.png?v=1765206540`,
+      title: t('category_neutre.six_g'),
+      chips: [
+        { icon: <RulerIcon />, label: t('category_neutre.dim_6'), variant: 'cream' },
+        { icon: <MinimizeIcon />, label: t('category_neutre.compact') },
+        { icon: <LeafIcon />, label: t('category_neutre.full_cotton') },
+      ],
+    },
+  ];
 
   return (
     <div className="space-y-8">
       <StepHeader
-        title="Sélection du grammage"
-        subtitle="Notre gamme Oshibori Neutres"
+        title={t('category_neutre.title')}
+        subtitle={t('category_neutre.subtitle')}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
