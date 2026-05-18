@@ -49,31 +49,6 @@ const SEMI_15G_TRANSPARENT: MockupBackground = {
   logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
-// Templates Full perso (4 colorways / vues). Zones d'impression à
-// recalibrer dès que David envoie son fichier Illustrator.
-const FULL_PERSO_TEMPLATES: MockupBackground[] = [
-  {
-    url: `${CDN}perso_207.webp?v=1693945029`,
-    alt: 'Full perso — variante 1',
-    logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
-  },
-  {
-    url: `${CDN}perso_208.webp?v=1693945029`,
-    alt: 'Full perso — variante 2',
-    logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
-  },
-  {
-    url: `${CDN}perso_202.webp?v=1693945029`,
-    alt: 'Full perso — variante 3',
-    logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
-  },
-  {
-    url: `${CDN}perso_206.webp?v=1693945029`,
-    alt: 'Full perso — variante 4',
-    logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
-  },
-];
-
 /**
  * Sélectionne 1 ou 2 fonds selon le contexte. Pour le MVP : on couvre
  * surtout la semi-perso 15g (où on a déjà les visuels). Pour full perso
@@ -92,10 +67,13 @@ function selectBackgrounds(state: WizardState): MockupBackground[] {
     // Pas encore de packaging choisi → on montre les 3 vues.
     return [SEMI_15G_BLANC, SEMI_15G_NOIR, SEMI_15G_TRANSPARENT];
   }
-  // Full perso : 4 templates de variantes packaging (perso_202/206/207/208).
-  // Donne au client une idée des différents rendus possibles.
+  // Full perso : on réutilise les fonds semi-perso (blanc + noir) en
+  // attendant qu'on ait de vrais templates full perso 3D dédiés au
+  // mockup. Les images de marques (perso_*, AREV, Rosewood…) servent
+  // d'EXEMPLES CLIENTS dans la galerie sous le step Grammage,
+  // pas comme background de composition logo.
   if (state.persoLevel === 'Full perso') {
-    return FULL_PERSO_TEMPLATES;
+    return [SEMI_15G_BLANC, SEMI_15G_NOIR];
   }
   return [];
 }
@@ -200,9 +178,7 @@ function MockupPreviewBody({
               ? 'grid-cols-1 sm:max-w-sm'
               : backgrounds.length === 2
                 ? 'grid-cols-1 sm:grid-cols-2'
-                : backgrounds.length === 3
-                  ? 'grid-cols-1 sm:grid-cols-3'
-                  : 'grid-cols-2 sm:grid-cols-2 lg:grid-cols-4'
+                : 'grid-cols-1 sm:grid-cols-3'
           }`}
         >
           {backgrounds.map((bg) => (

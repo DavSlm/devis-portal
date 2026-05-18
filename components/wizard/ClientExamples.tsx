@@ -24,6 +24,10 @@ const EXAMPLES_SEMI: Example[] = [
 ];
 
 const EXAMPLES_FULL: Example[] = [
+  { img: `${CDN}perso_207.webp?v=1693945029`, caption: 'Packaging perso · variante 1' },
+  { img: `${CDN}perso_208.webp?v=1693945029`, caption: 'Packaging perso · variante 2' },
+  { img: `${CDN}perso_202.webp?v=1693945029`, caption: 'Packaging perso · variante 3' },
+  { img: `${CDN}perso_206.webp?v=1693945029`, caption: 'Packaging perso · variante 4' },
   { img: `${CDN}arev.png?v=1734850751`, caption: 'AREV' },
   { img: `${CDN}Air_senegal.png?v=1734850752`, caption: 'Air Sénégal' },
   { img: `${CDN}Rosewood_dae0ad50-8371-4347-8abd-f59c2f5ce056.png?v=1734850751`, caption: 'Rosewood' },
