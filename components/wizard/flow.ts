@@ -10,6 +10,7 @@ export type StepId =
   | 'category-neutre'
   | 'grammage'
   | 'matiere-full-15g'
+  | 'scenteur-full'
   | 'packaging'
   | 'brief'
   | 'quantity'
@@ -31,6 +32,9 @@ export function computeFlow(state: WizardState): StepId[] {
     } else if (state.persoLevel === 'Full perso') {
       steps.push('grammage');
       if (state.grammage === '15 grammes') steps.push('matiere-full-15g');
+      // Choix du parfum (fleur d'oranger / thé blanc / thé vert / sans),
+      // disponible dès que le grammage est sélectionné.
+      if (state.grammage) steps.push('scenteur-full');
       steps.push('brief');
     }
   } else if (state.productType === 'Plateaux') {
@@ -70,6 +74,9 @@ export function canAdvance(step: StepId, state: WizardState): boolean {
     case 'matiere-full-15g':
       return !!state.matiere;
 
+    case 'scenteur-full':
+      return !!state.scenteur;
+
     case 'packaging':
       return !!state.packagingId;
 
@@ -104,6 +111,7 @@ export const STEP_LABELS: Record<StepId, string> = {
   'category-neutre': 'Variante',
   'grammage': 'Grammage',
   'matiere-full-15g': 'Matière',
+  'scenteur-full': 'Parfum',
   packaging: 'Emballage',
   brief: 'Brief',
   quantity: 'Quantité',

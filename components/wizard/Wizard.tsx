@@ -10,6 +10,7 @@ import { StepPersoLevel } from './steps/StepPersoLevel';
 import { StepCategoryNeutre } from './steps/StepCategoryNeutre';
 import { StepGrammage } from './steps/StepGrammage';
 import { StepMatiere } from './steps/StepMatiere';
+import { StepScent } from './steps/StepScent';
 import { StepPackaging } from './steps/StepPackaging';
 import { StepBrief } from './steps/StepBrief';
 import { StepQuantity } from './steps/StepQuantity';
@@ -73,6 +74,7 @@ function WizardContent() {
           {currentStep === 'category-neutre' && <StepCategoryNeutre />}
           {currentStep === 'grammage' && <StepGrammage />}
           {currentStep === 'matiere-full-15g' && <StepMatiere />}
+          {currentStep === 'scenteur-full' && <StepScent />}
           {currentStep === 'packaging' && <StepPackaging />}
           {currentStep === 'brief' && <StepBrief />}
           {currentStep === 'quantity' && <StepQuantity />}

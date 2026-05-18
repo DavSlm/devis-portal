@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
 import {
@@ -13,13 +13,12 @@ import {
 
 export function StepQuantity() {
   const { state, set } = useWizard();
-  const [showProps, setShowProps] = useState(true);
 
   const rule = useMemo(() => quantityRule(state), [state]);
   const suggestions = useMemo(() => computeSuggestions(state, rule), [state, rule]);
   const validation = useMemo(() => validateQuantity(state), [state]);
   const isPlateaux = isPlateauxCategory(state);
-  const showValueProps = state.productType === 'Oshibori';
+  const showAdvantages = state.productType === 'Oshibori';
   const showDluShelf = state.productType === 'Oshibori' && state.persoLevel === 'Full perso';
 
   const inc = () => {
@@ -34,37 +33,6 @@ export function StepQuantity() {
   return (
     <div className="space-y-8">
       <StepHeader title="Quantité souhaitée" subtitle={rule.label} />
-
-      {showValueProps && (
-        <details
-          className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-white overflow-hidden"
-          open={showProps}
-          onToggle={(e) => setShowProps((e.target as HTMLDetailsElement).open)}
-        >
-          <summary
-            className="cursor-pointer flex items-center gap-3 px-5 py-3"
-            style={{ background: 'var(--qw-cream)', listStyle: 'none' }}
-          >
-            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-gold-dark whitespace-nowrap">
-              Pourquoi ce prix
-            </span>
-            <span className="hidden sm:block flex-1 text-xs text-ink-soft truncate">
-              Made in France · Certifié cosmétique · DLU 2 ans · Testé dermatologiquement
-            </span>
-            <span aria-hidden="true" className="text-gold-dark text-base">
-              {showProps ? '⌃' : '⌄'}
-            </span>
-          </summary>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-5 list-none">
-            <ValueProp title="Made in France" desc="Production et conditionnement français" />
-            <ValueProp title="Matières naturelles" desc="100% coton ou 80% bambou — 20% coton" />
-            <ValueProp title="Usine certifiée cosmétique" desc="Normes ISO 22716 et HACCP" />
-            <ValueProp title="Testé dermatologiquement" desc="Hypoallergénique, sans alcool" />
-            <ValueProp title="Parfums signature" desc="Fragrances haut de gamme exclusives" />
-            <ValueProp title="Lot tracé · DLU 2 ans" desc="Sécurité & traçabilité garanties" />
-          </ul>
-        </details>
-      )}
 
       {showDluShelf && (
         <p
@@ -160,19 +128,42 @@ export function StepQuantity() {
       >
         {validation.msg}
       </p>
+
+      {showAdvantages && <Advantages />}
     </div>
   );
 }
 
-function ValueProp({ title, desc }: { title: string; desc: string }) {
+const ADVANTAGES: string[] = [
+  'Production française',
+  'Conditionnement français',
+  'Usine certifiée cosmétique, norme ISO 22716',
+  'Parfums signature, fragrances haut de gamme exclusives',
+  'Fabriqué en France',
+  'Matières naturelles : 100% coton ou 80% bambou / 20% coton',
+  'Testé dermatologiquement, hypoallergénique et sans alcool',
+  'Lot tracé · DLU de 2 ans à partir de la production',
+  'Sécurité et traçabilité garanties pour vos clients',
+];
+
+function Advantages() {
   return (
-    <li className="relative pl-6 leading-snug">
-      <span
-        className="absolute left-0 top-2 w-2 h-2 rounded-full"
-        style={{ background: 'var(--qw-gold)' }}
-      />
-      <strong className="block font-semibold text-ink text-sm">{title}</strong>
-      <span className="block text-xs text-ink-soft">{desc}</span>
-    </li>
+    <section className="pt-6 border-t border-[var(--qw-cream-strong)] space-y-3">
+      <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
+        Nos engagements
+      </h3>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 list-none">
+        {ADVANTAGES.map((adv) => (
+          <li key={adv} className="relative pl-5 text-sm text-ink-soft leading-snug">
+            <span
+              className="absolute left-0 top-2 w-1.5 h-1.5 rounded-full"
+              style={{ background: 'var(--qw-gold)' }}
+              aria-hidden="true"
+            />
+            {adv}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

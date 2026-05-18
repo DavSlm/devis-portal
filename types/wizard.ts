@@ -106,7 +106,7 @@ export const initialState: WizardState = {
   billingPostalCode: '',
   billingCity: '',
   billingCountry: '',
-  billingSame: true,
+  billingSame: false,
   carrierPhone: '',
   message: '',
 };

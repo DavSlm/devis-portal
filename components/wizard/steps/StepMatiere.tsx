@@ -19,14 +19,16 @@ export function StepMatiere() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <PickCard
-          icon="◯"
+          imageUrl="TODO"
+          imageAlt="Coton 100%"
           title="100% Coton"
           desc="Notre matière standard, douce et absorbante."
           selected={state.matiere === '100% Coton'}
           onClick={() => select('100% Coton')}
         />
         <PickCard
-          icon="◑"
+          imageUrl="TODO"
+          imageAlt="80% Bambou - 20% Coton"
           title="80% Bambou — 20% Coton"
           desc="Mélange premium, encore plus soft au toucher."
           ghostChips={['+ 0,10 € / unité']}

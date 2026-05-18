@@ -35,7 +35,7 @@ export function PickCard({
       onClick={onClick}
       className={`qw-card-pick ${selected ? 'is-selected' : ''} w-full`}
     >
-      {imageUrl && (
+      {imageUrl && imageUrl !== 'TODO' && (
         <span className="block w-full aspect-square overflow-hidden rounded-[var(--qw-input-radius)] bg-white">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -44,6 +44,18 @@ export function PickCard({
             loading="lazy"
             className="w-full h-full object-contain"
           />
+        </span>
+      )}
+      {imageUrl === 'TODO' && (
+        <span
+          className="flex items-center justify-center w-full aspect-square rounded-[var(--qw-input-radius)] text-xs text-ink-soft"
+          style={{
+            background: 'var(--qw-cream)',
+            border: '1px dashed var(--qw-cream-strong)',
+          }}
+          aria-label="Image à venir"
+        >
+          Image à venir
         </span>
       )}
       {icon && !imageUrl && (
