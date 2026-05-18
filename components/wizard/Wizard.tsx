@@ -5,6 +5,9 @@ import { useDraftAutoSave } from './useDraftAutoSave';
 import { ProgressBar } from './ProgressBar';
 import { NavBar } from './NavBar';
 import { WizardSidebar } from './WizardSidebar';
+import { LocaleSwitcher } from './LocaleSwitcher';
+import { I18nProvider, useT } from '@/lib/i18n/Provider';
+import type { Locale } from '@/lib/i18n/dictionary';
 import { StepProfile } from './steps/StepProfile';
 import { StepProductType } from './steps/StepProductType';
 import { StepPersoLevel } from './steps/StepPersoLevel';
@@ -20,6 +23,7 @@ import { StepSummary } from './steps/StepSummary';
 
 function WizardContent() {
   const { currentStep, state } = useWizard();
+  const { t } = useT();
   // Auto-sauvegarde en brouillon dès qu'un email/téléphone/produit est
   // renseigné. Tourne sur toutes les étapes (pas juste le résumé).
   useDraftAutoSave(state);
@@ -42,19 +46,22 @@ function WizardContent() {
               href="https://oshiboriconcept.com"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Oshibori Concept — site officiel"
+              aria-label={`${t('header.logoAlt')} — site officiel`}
               className="block"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="https://oshiboriconcept.com/cdn/shop/files/oshiboriconcept-logo-1599554503_e03c2a56-3050-444f-871a-61225ec6cf3e.png"
-                alt="Oshibori Concept"
+                alt={t('header.logoAlt')}
                 className="h-9 sm:h-12 w-auto"
               />
             </a>
-            <span className="text-[10px] sm:text-xs uppercase tracking-[0.08em] text-gold-dark">
-              Devis personnalisé
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline text-xs uppercase tracking-[0.08em] text-gold-dark">
+                {t('header.tagline')}
+              </span>
+              <LocaleSwitcher />
+            </div>
           </div>
           {/* Mobile only — sur desktop la ProgressBar vit dans la sidebar. */}
           <div className="lg:hidden">
@@ -109,10 +116,12 @@ function WizardContent() {
   );
 }
 
-export function Wizard() {
+export function Wizard({ initialLocale }: { initialLocale?: Locale } = {}) {
   return (
-    <WizardProvider>
-      <WizardContent />
-    </WizardProvider>
+    <I18nProvider initialLocale={initialLocale}>
+      <WizardProvider>
+        <WizardContent />
+      </WizardProvider>
+    </I18nProvider>
   );
 }

@@ -2,9 +2,11 @@
 
 import { useWizard } from './WizardProvider';
 import { STEP_LABELS } from './flow';
+import { useT } from '@/lib/i18n/Provider';
 
 export function ProgressBar() {
   const { currentIndex, totalSteps, currentStep } = useWizard();
+  const { t } = useT();
   const pct = totalSteps > 1 ? ((currentIndex + 1) / totalSteps) * 100 : 100;
 
   return (
@@ -14,7 +16,7 @@ export function ProgressBar() {
           {STEP_LABELS[currentStep]}
         </span>
         <span className="text-xs text-ink-soft">
-          Étape {currentIndex + 1} sur {totalSteps}
+          {t('sidebar.progress_step', { current: currentIndex + 1, total: totalSteps })}
         </span>
       </div>
       <div

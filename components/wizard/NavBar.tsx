@@ -1,9 +1,11 @@
 'use client';
 
 import { useWizard } from './WizardProvider';
+import { useT } from '@/lib/i18n/Provider';
 
 export function NavBar() {
   const { isFirst, isLast, canAdvance, next, prev } = useWizard();
+  const { t } = useT();
 
   return (
     <nav className="flex items-center justify-between gap-3 pt-6 border-t border-[var(--qw-border-soft)]">
@@ -13,7 +15,7 @@ export function NavBar() {
         disabled={isFirst}
         className="px-5 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-medium text-ink-soft hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
-        ← Précédent
+        ← {t('nav.previous')}
       </button>
 
       {!isLast && (
@@ -23,7 +25,7 @@ export function NavBar() {
           disabled={!canAdvance}
           className="px-6 py-2.5 rounded-[var(--qw-btn-radius)] text-sm font-semibold bg-[var(--qw-gold)] hover:bg-[var(--qw-gold-dark)] text-white shadow-[var(--qw-shadow-md)] disabled:bg-[var(--qw-cream-strong)] disabled:text-ink-soft disabled:shadow-none disabled:cursor-not-allowed transition-all"
         >
-          Suivant →
+          {t('nav.next')} →
         </button>
       )}
     </nav>

@@ -12,6 +12,7 @@
 import { useWizard } from './WizardProvider';
 import { STEP_LABELS, type StepId } from './flow';
 import { ProgressBar } from './ProgressBar';
+import { useT } from '@/lib/i18n/Provider';
 import type { WizardState } from '@/types/wizard';
 
 function summaryFor(step: StepId, state: WizardState): string {
@@ -57,6 +58,7 @@ function summaryFor(step: StepId, state: WizardState): string {
 
 export function WizardSidebar() {
   const { flow, currentIndex, state, goTo } = useWizard();
+  const { t } = useT();
 
   return (
     <aside
@@ -68,7 +70,7 @@ export function WizardSidebar() {
         style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
       >
         <h2 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-gold-dark mb-3">
-          Votre devis
+          {t('sidebar.title')}
         </h2>
         <div className="mb-5 pb-5 border-b border-[var(--qw-cream-strong)]">
           <ProgressBar />
