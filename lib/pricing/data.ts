@@ -92,8 +92,8 @@ export const PACKAGINGS: {
   },
   semi: {
     '15 grammes': [
-      { id: 'semi-15g-blanc',       label: 'Emballage Blanc',       sub: 'Parfum Thé Blanc', pack: 'blanc',       img: `${CDN}15gBlanc.png?v=1688637933` },
-      { id: 'semi-15g-noir',        label: 'Emballage Noir',        sub: 'Parfum Thé Blanc', pack: 'noir',        img: `${CDN}15gNoir.png?v=1688640569`, note: 'Impression en encre blanche uniquement (logo et texte en blanc)' },
+      { id: 'semi-15g-blanc',       label: 'Emballage Blanc',       sub: 'Parfum Thé Blanc', pack: 'blanc',       img: `${CDN}oshiboripersonnalisable4_aedcffbf-7e56-42ac-8ecb-1458ea26c870.png?v=1704812853` },
+      { id: 'semi-15g-noir',        label: 'Emballage Noir',        sub: 'Parfum Thé Blanc', pack: 'noir',        img: `${CDN}oshiboripersonnalisable3_787af666-ab22-457c-a60d-6db48eecaeaf.png?v=1704813143`, note: 'Impression en encre blanche uniquement (logo et texte en blanc)' },
       { id: 'semi-15g-transparent', label: 'Emballage Transparent', sub: 'Parfum Thé Blanc', pack: 'transparent', img: `${CDN}oshiboripersoclear.png?v=1704818907` },
     ],
     '10 grammes': [

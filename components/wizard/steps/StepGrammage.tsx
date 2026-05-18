@@ -29,7 +29,7 @@ export function StepGrammage() {
     {
       value: '15 grammes',
       imgNeutre: `${CDN}Oshibori_15_grammes_2026.png?v=1765206540`,
-      imgSemi: `${CDN}15gBlanc.png?v=1688637933`,
+      imgSemi: 'TODO',
       imgFull: 'TODO',
       title: t('category_neutre.fifteen_g'),
       infoChips: [
@@ -41,7 +41,7 @@ export function StepGrammage() {
     {
       value: '10 grammes',
       imgNeutre: `${CDN}10groshi.png?v=1765206540`,
-      imgSemi: `${CDN}10gBlanc.png?v=1688722926`,
+      imgSemi: 'TODO',
       imgFull: 'TODO',
       title: t('category_neutre.ten_g'),
       infoChips: [
