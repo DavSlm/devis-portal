@@ -14,6 +14,14 @@ import {
   validateQuantity,
 } from '@/lib/pricing';
 import type { WizardState } from '@/types/wizard';
+import {
+  AwardIcon,
+  CalendarIcon,
+  DropletIcon,
+  FlagFrIcon,
+  LeafIcon,
+  SparkleIcon,
+} from '../icons';
 
 interface Tier {
   /** Quantité minimale (en Oshibori ou plateaux selon contexte) */
@@ -333,33 +341,72 @@ export function StepQuantity() {
   );
 }
 
-const ADVANTAGES: string[] = [
-  'Production française',
-  'Conditionnement français',
-  'Usine certifiée cosmétique, norme ISO 22716',
-  'Parfums signature, fragrances haut de gamme exclusives',
-  'Fabriqué en France',
-  'Matières naturelles : 100% coton ou 80% bambou / 20% coton',
-  'Testé dermatologiquement, hypoallergénique et sans alcool',
-  'Lot tracé · DLU de 2 ans à partir de la production',
-  'Sécurité et traçabilité garanties pour vos clients',
+interface Engagement {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}
+
+const ENGAGEMENTS: Engagement[] = [
+  {
+    icon: <FlagFrIcon width={20} height={20} />,
+    title: 'Fabriqué en France',
+    desc: 'Production et conditionnement intégralement français.',
+  },
+  {
+    icon: <AwardIcon width={20} height={20} />,
+    title: 'Usine certifiée ISO 22716',
+    desc: 'Bonnes pratiques de fabrication cosmétique (BPF européennes).',
+  },
+  {
+    icon: <LeafIcon width={20} height={20} />,
+    title: 'Matières naturelles',
+    desc: '100 % coton ou 80 % bambou / 20 % coton — doux et absorbants.',
+  },
+  {
+    icon: <DropletIcon width={20} height={20} />,
+    title: 'Testé dermatologiquement',
+    desc: 'Hypoallergénique, sans alcool, validé pour toutes les peaux.',
+  },
+  {
+    icon: <SparkleIcon width={20} height={20} />,
+    title: 'Parfums signature',
+    desc: 'Fragrances exclusives haut de gamme, créées pour Oshibori Concept.',
+  },
+  {
+    icon: <CalendarIcon width={20} height={20} />,
+    title: 'DLU 2 ans · lot tracé',
+    desc: 'Traçabilité complète, sécurité garantie pour vos clients.',
+  },
 ];
 
 function Advantages() {
   return (
-    <section className="pt-6 border-t border-[var(--qw-cream-strong)] space-y-3">
+    <section className="pt-6 border-t border-[var(--qw-cream-strong)] space-y-4">
       <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
         Nos engagements
       </h3>
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 list-none">
-        {ADVANTAGES.map((adv) => (
-          <li key={adv} className="relative pl-5 text-sm text-ink-soft leading-snug">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 list-none">
+        {ENGAGEMENTS.map((e) => (
+          <li key={e.title} className="flex items-start gap-3">
             <span
-              className="absolute left-0 top-2 w-1.5 h-1.5 rounded-full"
-              style={{ background: 'var(--qw-gold)' }}
+              className="shrink-0 mt-0.5 inline-flex items-center justify-center w-9 h-9 rounded-full"
+              style={{
+                background: 'var(--qw-gold-light)',
+                color: 'var(--qw-gold-dark)',
+              }}
               aria-hidden="true"
-            />
-            {adv}
+            >
+              {e.icon}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-ink leading-snug">
+                {e.title}
+              </span>
+              <span className="block text-xs text-ink-soft leading-snug mt-0.5">
+                {e.desc}
+              </span>
+            </span>
           </li>
         ))}
       </ul>

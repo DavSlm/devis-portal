@@ -2,6 +2,11 @@
 
 import type { ReactNode } from 'react';
 
+export interface InfoChip {
+  icon: ReactNode;
+  label: string;
+}
+
 interface PickCardProps {
   selected?: boolean;
   onClick: () => void;
@@ -13,6 +18,8 @@ interface PickCardProps {
   meta?: string;
   chips?: string[];
   ghostChips?: string[];
+  /** Pastilles d'information (icône + label), outlined, neutres. */
+  infoChips?: InfoChip[];
   tall?: boolean;
 }
 
@@ -27,6 +34,7 @@ export function PickCard({
   meta,
   chips,
   ghostChips,
+  infoChips,
   tall,
 }: PickCardProps) {
   return (
@@ -74,6 +82,25 @@ export function PickCard({
           {meta}
         </span>
       )}
+      {infoChips?.length ? (
+        <span className="flex flex-wrap gap-1.5 mt-1.5">
+          {infoChips.map((c, i) => (
+            <span
+              key={`${c.label}-${i}`}
+              className="inline-flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-full font-medium text-ink-soft"
+              style={{
+                background: '#fff',
+                border: '1px solid var(--qw-cream-strong)',
+              }}
+            >
+              <span style={{ color: 'var(--qw-gold-dark)' }} className="shrink-0">
+                {c.icon}
+              </span>
+              {c.label}
+            </span>
+          ))}
+        </span>
+      ) : null}
       {(chips?.length || ghostChips?.length) && (
         <span className="flex flex-wrap gap-1.5 mt-2">
           {chips?.map((c) => (
