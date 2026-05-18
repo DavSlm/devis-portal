@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WizardState } from '@/types/wizard';
 import { CDN } from '@/lib/pricing/data';
+import { useT } from '@/lib/i18n/Provider';
 
 type PreviewMode = '3d' | 'flat';
 
 interface FlatMockup {
   url: string;
-  alt: string;
+  altKey: string;
 }
 
 // =====================================================
@@ -25,32 +26,29 @@ interface FlatMockup {
 
 interface MockupBackground {
   url: string;
-  alt: string;
+  altKey: string;
   /** Rectangle de marquage en coordonnées relatives (0..1). */
   logoBox: { x: number; y: number; w: number; h: number };
   /** Si true, le logo s'imprime en blanc sur fond foncé (encres claires uniquement). */
   whiteInkOnly?: boolean;
 }
 
-// Zones d'impression resserrées + clip côté canvas pour garantir le
-// non-débordement. Coordonnées relatives à recalibrer dès que David
-// envoie son fichier Illustrator (les vraies bounding boxes y sont).
 const SEMI_15G_BLANC: MockupBackground = {
-  url: `${CDN}oshiboripersonnalisable4_aedcffbf-7e56-42ac-8ecb-1458ea26c870.png?v=1704812853`,
-  alt: 'Emballage semi-perso 15g blanc',
+  url: `${CDN}15gBlanc.png?v=1688637933`,
+  altKey: 'preview.canvas_alt_15g_blanc',
   logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
 const SEMI_15G_NOIR: MockupBackground = {
-  url: `${CDN}oshiboripersonnalisable3_787af666-ab22-457c-a60d-6db48eecaeaf.png?v=1704813143`,
-  alt: 'Emballage semi-perso 15g noir',
+  url: `${CDN}15gNoir.png?v=1688640569`,
+  altKey: 'preview.canvas_alt_15g_noir',
   logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
   whiteInkOnly: true,
 };
 
 const SEMI_15G_TRANSPARENT: MockupBackground = {
   url: `${CDN}oshiboripersoclear.png?v=1704818907`,
-  alt: 'Emballage semi-perso 15g transparent',
+  altKey: 'preview.canvas_alt_15g_transparent',
   logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
@@ -62,19 +60,19 @@ const SEMI_15G_TRANSPARENT: MockupBackground = {
  */
 const MAQUETTE_15G_BLANC: FlatMockup = {
   url: `${CDN}15gBlanc.png?v=1688637933`,
-  alt: 'Maquette 15g · packaging blanc',
+  altKey: 'preview.maquette_15g_blanc',
 };
 const MAQUETTE_15G_NOIR: FlatMockup = {
   url: `${CDN}15gNoir.png?v=1688640569`,
-  alt: 'Maquette 15g · packaging noir',
+  altKey: 'preview.maquette_15g_noir',
 };
 const MAQUETTE_10G_BLANC: FlatMockup = {
   url: `${CDN}10gBlanc.png?v=1688722926`,
-  alt: 'Maquette 10g · packaging blanc',
+  altKey: 'preview.maquette_10g_blanc',
 };
 const MAQUETTE_10G_NOIR: FlatMockup = {
   url: `${CDN}10gNoir.png?v=1688722925`,
-  alt: 'Maquette 10g · packaging noir',
+  altKey: 'preview.maquette_10g_noir',
 };
 
 function selectFlatMockups(state: WizardState): FlatMockup[] {
@@ -131,10 +129,10 @@ function isRenderableLogo(file: File): boolean {
 
 export function LogoMockupPreview({ state }: { state: WizardState }) {
   const file = state.attachmentFile;
+  const { t } = useT();
   const backgrounds = useMemo(() => selectBackgrounds(state), [state]);
   const flatMockups = useMemo(() => selectFlatMockups(state), [state]);
 
-  // Object URL stable pour la durée du fichier (révoqué quand le fichier change).
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!file || !isRenderableLogo(file)) {
@@ -147,18 +145,18 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
   }, [file]);
 
   if (!file) return null;
-  if (backgrounds.length === 0) return null;
+  if (backgrounds.length === 0 && flatMockups.length === 0) return null;
 
   if (!isRenderableLogo(file)) {
     return (
       <section className="space-y-2 pt-4 border-t border-[var(--qw-cream-strong)]">
         <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
-          Aperçu du marquage
+          {t('preview.non_renderable_title')}
         </h3>
         <p className="text-sm text-ink-soft">
-          La prévisualisation automatique est disponible pour les fichiers
-          <strong> PNG, JPG ou SVG</strong>. Le format {file.name.split('.').pop()?.toUpperCase()}
-          que tu as joint sera traité directement par notre studio.
+          {t('preview.non_renderable_body', {
+            ext: file.name.split('.').pop()?.toUpperCase() ?? '',
+          })}
         </p>
       </section>
     );
@@ -182,43 +180,45 @@ function MockupPreviewBody({
   flatMockups: FlatMockup[];
   logoUrl: string | null;
 }) {
-  const [mode, setMode] = useState<PreviewMode>('3d');
+  const { t } = useT();
+  const has3d = backgrounds.length > 0;
+  const [mode, setMode] = useState<PreviewMode>(has3d ? '3d' : 'flat');
 
   return (
     <section className="space-y-3 pt-4 border-t border-[var(--qw-cream-strong)]">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
-          Aperçu de votre marquage
+          {t('preview.section_title')}
         </h3>
-        <span className="text-[11px] text-ink-soft italic">
-          Maquette indicative — le rendu final dépend de la matière et de l&apos;impression.
-        </span>
+        <span className="text-[11px] text-ink-soft italic">{t('preview.indicative')}</span>
       </div>
 
-      <div className="inline-flex rounded-full border border-[var(--qw-cream-strong)] bg-white p-0.5 text-xs">
-        <button
-          type="button"
-          onClick={() => setMode('3d')}
-          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
-            mode === '3d'
-              ? 'bg-[var(--qw-gold)] text-white'
-              : 'text-ink-soft hover:text-ink'
-          }`}
-        >
-          Vue 3D
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('flat')}
-          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
-            mode === 'flat'
-              ? 'bg-[var(--qw-gold)] text-white'
-              : 'text-ink-soft hover:text-ink'
-          }`}
-        >
-          Maquette
-        </button>
-      </div>
+      {has3d && (
+        <div className="inline-flex rounded-full border border-[var(--qw-cream-strong)] bg-white p-0.5 text-xs">
+          <button
+            type="button"
+            onClick={() => setMode('3d')}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+              mode === '3d'
+                ? 'bg-[var(--qw-gold)] text-white'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            {t('preview.tab_3d')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('flat')}
+            className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+              mode === 'flat'
+                ? 'bg-[var(--qw-gold)] text-white'
+                : 'text-ink-soft hover:text-ink'
+            }`}
+          >
+            {t('preview.tab_flat')}
+          </button>
+        </div>
+      )}
 
       {mode === '3d' ? (
         <div
@@ -242,22 +242,25 @@ function MockupPreviewBody({
               : 'grid-cols-1 lg:grid-cols-2'
           }`}
         >
-          {flatMockups.map((m) => (
-            <figure key={m.url} className="space-y-1.5">
-              <div className="w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={m.url}
-                  alt={m.alt}
-                  loading="lazy"
-                  className="w-full h-auto object-contain"
-                />
-              </div>
-              <figcaption className="text-[11px] text-ink-soft text-center">
-                {m.alt}
-              </figcaption>
-            </figure>
-          ))}
+          {flatMockups.map((m) => {
+            const alt = t(m.altKey);
+            return (
+              <figure key={m.url} className="space-y-1.5">
+                <div className="w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={m.url}
+                    alt={alt}
+                    loading="lazy"
+                    className="w-full h-auto object-contain"
+                  />
+                </div>
+                <figcaption className="text-[11px] text-ink-soft text-center">
+                  {alt}
+                </figcaption>
+              </figure>
+            );
+          })}
         </div>
       ) : (
         <MaquettePlaceholder />
@@ -267,6 +270,7 @@ function MockupPreviewBody({
 }
 
 function MaquettePlaceholder() {
+  const { t } = useT();
   return (
     <div
       className="rounded-[var(--qw-input-radius)] p-6 sm:p-10 text-center space-y-2"
@@ -275,12 +279,8 @@ function MaquettePlaceholder() {
         border: '1px dashed var(--qw-cream-strong)',
       }}
     >
-      <div className="text-sm font-semibold text-ink">Maquette — bientôt disponible</div>
-      <p className="text-xs text-ink-soft max-w-prose mx-auto">
-        Une maquette technique à plat (dieline Illustrator) sera disponible ici très
-        prochainement pour cette configuration. Cela te permettra de visualiser
-        <em> exactement</em> les marges et la zone d&apos;impression avant production.
-      </p>
+      <div className="text-sm font-semibold text-ink">{t('preview.soon_title')}</div>
+      <p className="text-xs text-ink-soft max-w-prose mx-auto">{t('preview.soon_body')}</p>
     </div>
   );
 }
@@ -292,6 +292,7 @@ function MockupCanvas({
   bg: MockupBackground;
   logoUrl: string | null;
 }) {
+  const { t } = useT();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -316,11 +317,11 @@ function MockupCanvas({
     const both = Promise.all([
       new Promise<void>((res, rej) => {
         bgImg.onload = () => res();
-        bgImg.onerror = () => rej(new Error('Fond non chargeable'));
+        bgImg.onerror = () => rej(new Error(t('preview.bg_not_loadable')));
       }),
       new Promise<void>((res, rej) => {
         logoImg.onload = () => res();
-        logoImg.onerror = () => rej(new Error('Logo non lisible'));
+        logoImg.onerror = () => rej(new Error(t('preview.logo_not_readable')));
       }),
     ]);
 
@@ -396,6 +397,7 @@ function MockupCanvas({
     };
   }, [bg, logoUrl]);
 
+  const alt = t(bg.altKey);
   return (
     <figure className="space-y-1.5">
       <div className="aspect-square w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)] relative">
@@ -403,11 +405,11 @@ function MockupCanvas({
         <canvas
           ref={canvasRef}
           className="w-full h-full object-contain"
-          aria-label={bg.alt}
+          aria-label={alt}
         />
         {!ready && !err && (
           <span className="absolute inset-0 flex items-center justify-center text-xs text-ink-soft">
-            Génération de l&apos;aperçu…
+            {t('preview.generating')}
           </span>
         )}
         {err && (
@@ -417,8 +419,8 @@ function MockupCanvas({
         )}
       </div>
       <figcaption className="text-[11px] text-ink-soft text-center">
-        {bg.alt}
-        {bg.whiteInkOnly && ' (impression en blanc uniquement)'}
+        {alt}
+        {bg.whiteInkOnly && ` ${t('preview.white_ink_only')}`}
       </figcaption>
     </figure>
   );

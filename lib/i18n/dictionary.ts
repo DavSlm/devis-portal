@@ -267,6 +267,27 @@ export interface Translations {
     reference: string;
     back: string;
   };
+  preview: {
+    section_title: string;
+    non_renderable_title: string;
+    non_renderable_body: string;
+    indicative: string;
+    tab_3d: string;
+    tab_flat: string;
+    soon_title: string;
+    soon_body: string;
+    white_ink_only: string;
+    maquette_15g_blanc: string;
+    maquette_15g_noir: string;
+    maquette_10g_blanc: string;
+    maquette_10g_noir: string;
+    canvas_alt_15g_blanc: string;
+    canvas_alt_15g_noir: string;
+    canvas_alt_15g_transparent: string;
+    generating: string;
+    bg_not_loadable: string;
+    logo_not_readable: string;
+  };
 }
 
 export const fr: Translations = {
@@ -526,6 +547,30 @@ export const fr: Translations = {
     reference: 'Référence :',
     back: 'Retour sur oshibori-concept.com',
   },
+  preview: {
+    section_title: 'Aperçu de votre marquage',
+    non_renderable_title: 'Aperçu du marquage',
+    non_renderable_body:
+      'La prévisualisation automatique est disponible pour les fichiers PNG, JPG ou SVG. Le format {ext} que vous avez joint sera traité directement par notre studio.',
+    indicative:
+      "Maquette indicative — le rendu final dépend de la matière et de l'impression.",
+    tab_3d: 'Vue 3D',
+    tab_flat: 'Maquette',
+    soon_title: 'Maquette — bientôt disponible',
+    soon_body:
+      "Une maquette technique à plat (dieline Illustrator) sera disponible ici très prochainement pour cette configuration. Cela vous permettra de visualiser exactement les marges et la zone d'impression avant production.",
+    white_ink_only: '(impression en blanc uniquement)',
+    maquette_15g_blanc: 'Maquette 15g · packaging blanc',
+    maquette_15g_noir: 'Maquette 15g · packaging noir',
+    maquette_10g_blanc: 'Maquette 10g · packaging blanc',
+    maquette_10g_noir: 'Maquette 10g · packaging noir',
+    canvas_alt_15g_blanc: 'Emballage semi-perso 15g blanc',
+    canvas_alt_15g_noir: 'Emballage semi-perso 15g noir',
+    canvas_alt_15g_transparent: 'Emballage semi-perso 15g transparent',
+    generating: "Génération de l'aperçu…",
+    bg_not_loadable: 'Fond non chargeable',
+    logo_not_readable: 'Logo non lisible',
+  },
 };
 
 export const en: Translations = {
@@ -784,6 +829,30 @@ export const en: Translations = {
     body_part2: 'with a detailed quote tailored to your project.',
     reference: 'Reference:',
     back: 'Back to oshibori-concept.com',
+  },
+  preview: {
+    section_title: 'Branding preview',
+    non_renderable_title: 'Branding preview',
+    non_renderable_body:
+      'Automatic preview is available for PNG, JPG or SVG files. The {ext} file you attached will be handled directly by our studio.',
+    indicative:
+      'Indicative mockup — final rendering depends on fabric and printing.',
+    tab_3d: '3D view',
+    tab_flat: 'Mockup',
+    soon_title: 'Mockup — coming soon',
+    soon_body:
+      'A flat technical mockup (Illustrator dieline) will be available here very soon for this configuration. It will let you see margins and print area exactly before production.',
+    white_ink_only: '(white ink printing only)',
+    maquette_15g_blanc: 'Mockup 15g · white packaging',
+    maquette_15g_noir: 'Mockup 15g · black packaging',
+    maquette_10g_blanc: 'Mockup 10g · white packaging',
+    maquette_10g_noir: 'Mockup 10g · black packaging',
+    canvas_alt_15g_blanc: 'Semi-custom 15g white packaging',
+    canvas_alt_15g_noir: 'Semi-custom 15g black packaging',
+    canvas_alt_15g_transparent: 'Semi-custom 15g transparent packaging',
+    generating: 'Generating preview…',
+    bg_not_loadable: 'Background unavailable',
+    logo_not_readable: 'Logo unreadable',
   },
 };
 
