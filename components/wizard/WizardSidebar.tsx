@@ -11,6 +11,7 @@
 
 import { useWizard } from './WizardProvider';
 import { STEP_LABELS, type StepId } from './flow';
+import { ProgressBar } from './ProgressBar';
 import type { WizardState } from '@/types/wizard';
 
 function summaryFor(step: StepId, state: WizardState): string {
@@ -66,9 +67,12 @@ export function WizardSidebar() {
         className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-white p-4 max-h-[calc(100dvh-4rem)] overflow-y-auto"
         style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
       >
-        <h2 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-gold-dark mb-4">
+        <h2 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-gold-dark mb-3">
           Votre devis
         </h2>
+        <div className="mb-5 pb-5 border-b border-[var(--qw-cream-strong)]">
+          <ProgressBar />
+        </div>
         <ol className="space-y-3">
         {flow.map((step, idx) => {
           const status: 'done' | 'current' | 'upcoming' =

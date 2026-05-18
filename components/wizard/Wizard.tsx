@@ -56,7 +56,10 @@ function WizardContent() {
               Devis personnalisé
             </span>
           </div>
-          <ProgressBar />
+          {/* Mobile only — sur desktop la ProgressBar vit dans la sidebar. */}
+          <div className="lg:hidden">
+            <ProgressBar />
+          </div>
         </div>
       </header>
 

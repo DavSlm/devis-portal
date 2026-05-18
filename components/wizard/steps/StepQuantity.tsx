@@ -52,6 +52,22 @@ function snap(value: number, multiple: number, min: number, max: number): number
   return Math.max(min, Math.min(max, v));
 }
 
+// Slider en échelle log : position 0..SLIDER_RES ↔ quantité [min, max].
+// Évite que des paliers très proches (50, 300) se chevauchent visuellement.
+const SLIDER_RES = 1000;
+
+function qtyToPos(qty: number, min: number, max: number): number {
+  if (max <= min) return 0;
+  const t = Math.log(qty / min) / Math.log(max / min);
+  return Math.round(Math.max(0, Math.min(1, t)) * SLIDER_RES);
+}
+
+function posToQty(pos: number, min: number, max: number): number {
+  if (max <= min) return min;
+  const t = pos / SLIDER_RES;
+  return min * Math.pow(max / min, t);
+}
+
 export function StepQuantity() {
   const { state, set } = useWizard();
 
@@ -124,9 +140,6 @@ export function StepQuantity() {
     return Array.from(new Set(ticks)).sort((a, b) => a - b);
   }, [tiers, sliderBounds]);
 
-  const tickPercent = (v: number) =>
-    ((v - sliderBounds.min) / (sliderBounds.max - sliderBounds.min)) * 100;
-
   return (
     <div className="space-y-8">
       <StepHeader title="Quantité souhaitée" subtitle={rule.label} />
@@ -161,25 +174,28 @@ export function StepQuantity() {
         <div className="relative pt-1 pb-6">
           <input
             type="range"
-            min={sliderBounds.min}
-            max={sliderBounds.max}
-            step={rule.multiple}
-            value={sliderValue}
+            min={0}
+            max={SLIDER_RES}
+            step={1}
+            value={qtyToPos(sliderValue, sliderBounds.min, sliderBounds.max)}
             onChange={(e) => {
-              const v = parseInt(e.target.value, 10);
-              if (!Number.isFinite(v)) return;
-              set({ quantity: snap(v, rule.multiple, sliderBounds.min, sliderBounds.max) });
+              const pos = parseInt(e.target.value, 10);
+              if (!Number.isFinite(pos)) return;
+              const raw = posToQty(pos, sliderBounds.min, sliderBounds.max);
+              set({ quantity: snap(raw, rule.multiple, sliderBounds.min, sliderBounds.max) });
             }}
             aria-label="Sélecteur de quantité"
             className="qw-range w-full"
           />
-          {/* Ticks */}
+          {/* Ticks — positionnés en échelle log pour ne pas se chevaucher */}
           <div className="absolute inset-x-0 top-6 pointer-events-none">
             {tickValues.map((v) => (
               <span
                 key={v}
                 className="absolute -translate-x-1/2 block"
-                style={{ left: `${tickPercent(v)}%` }}
+                style={{
+                  left: `${(qtyToPos(v, sliderBounds.min, sliderBounds.max) / SLIDER_RES) * 100}%`,
+                }}
               >
                 <span className="block w-px h-2 bg-[var(--qw-cream-strong)] mx-auto" />
                 <span
