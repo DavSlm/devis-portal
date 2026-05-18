@@ -124,6 +124,7 @@ function isRenderableLogo(file: File): boolean {
 export function LogoMockupPreview({ state }: { state: WizardState }) {
   const file = state.attachmentFile;
   const backgrounds = useMemo(() => selectBackgrounds(state), [state]);
+  const dielines = useMemo(() => selectDielines(state), [state]);
 
   // Object URL stable pour la durée du fichier (révoqué quand le fichier change).
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -155,7 +156,6 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
     );
   }
 
-  const dielines = useMemo(() => selectDielines(state), [state]);
   return (
     <MockupPreviewBody
       backgrounds={backgrounds}
