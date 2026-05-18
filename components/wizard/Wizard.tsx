@@ -69,7 +69,8 @@ function WizardContent() {
             paddingRight: 'max(1rem, env(safe-area-inset-right))',
           }}
         >
-          <div className="flex-1 min-w-0 max-w-3xl mx-auto lg:mx-0 lg:ml-auto px-4 sm:px-6 py-6 sm:py-10">
+          <WizardSidebar />
+          <div className="flex-1 min-w-0 max-w-3xl mx-auto lg:mx-0 lg:mr-auto px-4 sm:px-6 py-6 sm:py-10">
             {currentStep === 'profile' && <StepProfile />}
             {currentStep === 'product-type' && <StepProductType />}
             {currentStep === 'perso-level' && <StepPersoLevel />}
@@ -83,7 +84,6 @@ function WizardContent() {
             {currentStep === 'shipping' && <StepShipping />}
             {currentStep === 'summary' && <StepSummary />}
           </div>
-          <WizardSidebar />
         </div>
       </main>
 

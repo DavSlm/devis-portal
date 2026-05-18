@@ -60,12 +60,16 @@ export function WizardSidebar() {
   return (
     <aside
       aria-label="Progression du devis"
-      className="hidden lg:block w-64 shrink-0 sticky top-0 self-start max-h-dvh overflow-y-auto py-10 pl-6 pr-2"
+      className="hidden lg:block w-64 shrink-0 sticky top-0 self-start py-8 pl-2 pr-6"
     >
-      <h2 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-gold-dark mb-4">
-        Votre devis
-      </h2>
-      <ol className="space-y-3">
+      <div
+        className="rounded-[var(--qw-card-radius)] border border-[var(--qw-cream-strong)] bg-white p-4 max-h-[calc(100dvh-4rem)] overflow-y-auto"
+        style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}
+      >
+        <h2 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-gold-dark mb-4">
+          Votre devis
+        </h2>
+        <ol className="space-y-3">
         {flow.map((step, idx) => {
           const status: 'done' | 'current' | 'upcoming' =
             idx < currentIndex ? 'done' : idx === currentIndex ? 'current' : 'upcoming';
@@ -110,7 +114,8 @@ export function WizardSidebar() {
             </li>
           );
         })}
-      </ol>
+        </ol>
+      </div>
     </aside>
   );
 }
