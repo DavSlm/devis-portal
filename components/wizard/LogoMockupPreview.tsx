@@ -7,119 +7,93 @@ import { useT } from '@/lib/i18n/Provider';
 
 type PreviewMode = '3d' | 'flat';
 
-interface FlatMockup {
-  url: string;
-  altKey: string;
+// =====================================================
+// Compositeur de prévisualisation logo.
+//
+// Charge la maquette technique du packaging Oshibori et dessine le logo
+// uploadé par dessus.
+//   - Vue 3D       : 1 logo au centre de l'oshibori (centerBox).
+//   - Vue Maquette : 2 logos — dans l'encadré "Zone d'impression"
+//                    (printZoneBox) + duplicate au centre (centerBox).
+// Le contenu hors-zone est rogné (ctx.clip) pour empêcher tout
+// débordement même si la calibration est imparfaite.
+// =====================================================
+
+interface BoxRel {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-// =====================================================
-// Compositeur de prévisualisation logo (niveau 1).
-//
-// Charge un fond d'emballage Oshibori, dessine le logo uploadé par
-// dessus dans la zone de marquage approximative (rectangle relatif
-// `logoBox` exprimé en pourcentage de l'image). Donne une idée du
-// rendu — pas du photoréalisme.
-//
-// Backgrounds disponibles : on choisit selon (persoLevel, grammage,
-// packagingId). Si le combo n'a pas de mockup défini → on n'affiche rien.
-// =====================================================
-
-interface MockupBackground {
+interface MaquetteConfig {
   url: string;
   altKey: string;
-  /** Rectangle de marquage en coordonnées relatives (0..1). */
-  logoBox: { x: number; y: number; w: number; h: number };
-  /** Si true, le logo s'imprime en blanc sur fond foncé (encres claires uniquement). */
+  /** Cadre dashed "Zone d'impression" sur la fiche (étroit et long). */
+  printZoneBox: BoxRel;
+  /** Centre du packaging (carré approx. au milieu de la bande centrale). */
+  centerBox: BoxRel;
+  /** Si true, impression encre blanche uniquement (packaging noir). */
   whiteInkOnly?: boolean;
 }
 
-const SEMI_15G_BLANC: MockupBackground = {
+// Coords calibrées sur les fiches techniques fournies (≈3342×2002 px,
+// packaging à droite de la fiche).
+const SEMI_15G_BLANC: MaquetteConfig = {
   url: `${CDN}15gBlanc.png?v=1688637933`,
   altKey: 'preview.canvas_alt_15g_blanc',
-  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
+  printZoneBox: { x: 0.479, y: 0.459, w: 0.366, h: 0.106 },
+  centerBox: { x: 0.571, y: 0.418, w: 0.183, h: 0.187 },
 };
 
-const SEMI_15G_NOIR: MockupBackground = {
+const SEMI_15G_NOIR: MaquetteConfig = {
+  ...SEMI_15G_BLANC,
   url: `${CDN}15gNoir.png?v=1688640569`,
   altKey: 'preview.canvas_alt_15g_noir',
-  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
   whiteInkOnly: true,
 };
 
-const SEMI_15G_TRANSPARENT: MockupBackground = {
+const SEMI_15G_TRANSPARENT: MaquetteConfig = {
+  ...SEMI_15G_BLANC,
   url: `${CDN}oshiboripersoclear.png?v=1704818907`,
   altKey: 'preview.canvas_alt_15g_transparent',
-  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
-/**
- * Sélectionne 1 ou 2 fonds selon le contexte. Pour le MVP : on couvre
- * surtout la semi-perso 15g (où on a déjà les visuels). Pour full perso
- * et 10g semi, on remontera des mockups plus tard quand David aura
- * fourni les visuels packaging dédiés.
- */
-const MAQUETTE_15G_BLANC: FlatMockup = {
-  url: `${CDN}15gBlanc.png?v=1688637933`,
-  altKey: 'preview.maquette_15g_blanc',
-};
-const MAQUETTE_15G_NOIR: FlatMockup = {
-  url: `${CDN}15gNoir.png?v=1688640569`,
-  altKey: 'preview.maquette_15g_noir',
-};
-const MAQUETTE_10G_BLANC: FlatMockup = {
+const SEMI_10G_BLANC: MaquetteConfig = {
   url: `${CDN}10gBlanc.png?v=1688722926`,
   altKey: 'preview.maquette_10g_blanc',
-};
-const MAQUETTE_10G_NOIR: FlatMockup = {
-  url: `${CDN}10gNoir.png?v=1688722925`,
-  altKey: 'preview.maquette_10g_noir',
+  printZoneBox: { x: 0.5, y: 0.45, w: 0.32, h: 0.105 },
+  centerBox: { x: 0.575, y: 0.415, w: 0.17, h: 0.18 },
 };
 
-function selectFlatMockups(state: WizardState): FlatMockup[] {
+const SEMI_10G_NOIR: MaquetteConfig = {
+  ...SEMI_10G_BLANC,
+  url: `${CDN}10gNoir.png?v=1688722925`,
+  altKey: 'preview.maquette_10g_noir',
+  whiteInkOnly: true,
+};
+
+function selectConfigs(state: WizardState): MaquetteConfig[] {
   if (state.persoLevel !== 'Semi-perso' && state.persoLevel !== 'Full perso') {
     return [];
   }
   if (state.grammage === '15 grammes') {
-    if (state.packagingId === 'semi-15g-noir') return [MAQUETTE_15G_NOIR];
-    if (state.packagingId === 'semi-15g-blanc') return [MAQUETTE_15G_BLANC];
-    if (state.packagingId === 'semi-15g-transparent') return [];
-    return [MAQUETTE_15G_BLANC, MAQUETTE_15G_NOIR];
-  }
-  if (state.grammage === '10 grammes') {
-    if (state.packagingId === 'semi-10g-noir-tv') return [MAQUETTE_10G_NOIR];
-    if (state.packagingId === 'semi-10g-blanc-tb') return [MAQUETTE_10G_BLANC];
-    return [MAQUETTE_10G_BLANC, MAQUETTE_10G_NOIR];
-  }
-  return [];
-}
-
-function selectBackgrounds(state: WizardState): MockupBackground[] {
-  if (state.persoLevel !== 'Semi-perso' && state.persoLevel !== 'Full perso') {
-    return [];
-  }
-  // Semi 15g : on choisit selon le packaging sélectionné (sinon les 3 par défaut).
-  if (state.persoLevel === 'Semi-perso' && state.grammage === '15 grammes') {
     if (state.packagingId === 'semi-15g-noir') return [SEMI_15G_NOIR];
     if (state.packagingId === 'semi-15g-transparent') return [SEMI_15G_TRANSPARENT];
     if (state.packagingId === 'semi-15g-blanc') return [SEMI_15G_BLANC];
-    // Pas encore de packaging choisi → on montre les 3 vues.
-    return [SEMI_15G_BLANC, SEMI_15G_NOIR, SEMI_15G_TRANSPARENT];
+    return [SEMI_15G_BLANC, SEMI_15G_NOIR];
   }
-  // Full perso : on réutilise les fonds semi-perso (blanc + noir) en
-  // attendant qu'on ait de vrais templates full perso 3D dédiés au
-  // mockup. Les images de marques (perso_*, AREV, Rosewood…) servent
-  // d'EXEMPLES CLIENTS dans la galerie sous le step Grammage,
-  // pas comme background de composition logo.
+  if (state.grammage === '10 grammes') {
+    if (state.packagingId === 'semi-10g-noir-tv') return [SEMI_10G_NOIR];
+    if (state.packagingId === 'semi-10g-blanc-tb') return [SEMI_10G_BLANC];
+    return [SEMI_10G_BLANC, SEMI_10G_NOIR];
+  }
   if (state.persoLevel === 'Full perso') {
     return [SEMI_15G_BLANC, SEMI_15G_NOIR];
   }
   return [];
 }
 
-/**
- * Vérifie qu'un fichier est rendable par <canvas>. PDF / AI / EPS / ZIP
- * → pas de preview (le serveur s'en chargera lors du devis).
- */
 function isRenderableLogo(file: File): boolean {
   const t = (file.type || '').toLowerCase();
   if (t.startsWith('image/')) return true;
@@ -130,8 +104,7 @@ function isRenderableLogo(file: File): boolean {
 export function LogoMockupPreview({ state }: { state: WizardState }) {
   const file = state.attachmentFile;
   const { t } = useT();
-  const backgrounds = useMemo(() => selectBackgrounds(state), [state]);
-  const flatMockups = useMemo(() => selectFlatMockups(state), [state]);
+  const configs = useMemo(() => selectConfigs(state), [state]);
 
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -145,7 +118,7 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
   }, [file]);
 
   if (!file) return null;
-  if (backgrounds.length === 0 && flatMockups.length === 0) return null;
+  if (configs.length === 0) return null;
 
   if (!isRenderableLogo(file)) {
     return (
@@ -162,27 +135,18 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
     );
   }
 
-  return (
-    <MockupPreviewBody
-      backgrounds={backgrounds}
-      flatMockups={flatMockups}
-      logoUrl={logoUrl}
-    />
-  );
+  return <MockupPreviewBody configs={configs} logoUrl={logoUrl} />;
 }
 
 function MockupPreviewBody({
-  backgrounds,
-  flatMockups,
+  configs,
   logoUrl,
 }: {
-  backgrounds: MockupBackground[];
-  flatMockups: FlatMockup[];
+  configs: MaquetteConfig[];
   logoUrl: string | null;
 }) {
   const { t } = useT();
-  const has3d = backgrounds.length > 0;
-  const [mode, setMode] = useState<PreviewMode>(has3d ? '3d' : 'flat');
+  const [mode, setMode] = useState<PreviewMode>('3d');
 
   return (
     <section className="space-y-3 pt-4 border-t border-[var(--qw-cream-strong)]">
@@ -193,103 +157,92 @@ function MockupPreviewBody({
         <span className="text-[11px] text-ink-soft italic">{t('preview.indicative')}</span>
       </div>
 
-      {has3d && (
-        <div className="inline-flex rounded-full border border-[var(--qw-cream-strong)] bg-white p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setMode('3d')}
-            className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
-              mode === '3d'
-                ? 'bg-[var(--qw-gold)] text-white'
-                : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            {t('preview.tab_3d')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('flat')}
-            className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
-              mode === 'flat'
-                ? 'bg-[var(--qw-gold)] text-white'
-                : 'text-ink-soft hover:text-ink'
-            }`}
-          >
-            {t('preview.tab_flat')}
-          </button>
-        </div>
-      )}
+      <div className="inline-flex rounded-full border border-[var(--qw-cream-strong)] bg-white p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setMode('3d')}
+          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+            mode === '3d'
+              ? 'bg-[var(--qw-gold)] text-white'
+              : 'text-ink-soft hover:text-ink'
+          }`}
+        >
+          {t('preview.tab_3d')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('flat')}
+          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+            mode === 'flat'
+              ? 'bg-[var(--qw-gold)] text-white'
+              : 'text-ink-soft hover:text-ink'
+          }`}
+        >
+          {t('preview.tab_flat')}
+        </button>
+      </div>
 
-      {mode === '3d' ? (
-        <div
-          className={`grid gap-3 ${
-            backgrounds.length === 1
-              ? 'grid-cols-1 sm:max-w-sm'
-              : backgrounds.length === 2
-                ? 'grid-cols-1 sm:grid-cols-2'
-                : 'grid-cols-1 sm:grid-cols-3'
-          }`}
-        >
-          {backgrounds.map((bg) => (
-            <MockupCanvas key={bg.url} bg={bg} logoUrl={logoUrl} />
-          ))}
-        </div>
-      ) : flatMockups.length > 0 ? (
-        <div
-          className={`grid gap-4 ${
-            flatMockups.length === 1
-              ? 'grid-cols-1'
-              : 'grid-cols-1 lg:grid-cols-2'
-          }`}
-        >
-          {flatMockups.map((m) => {
-            const alt = t(m.altKey);
-            return (
-              <figure key={m.url} className="space-y-1.5">
-                <div className="w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)]">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={m.url}
-                    alt={alt}
-                    loading="lazy"
-                    className="w-full h-auto object-contain"
-                  />
-                </div>
-                <figcaption className="text-[11px] text-ink-soft text-center">
-                  {alt}
-                </figcaption>
-              </figure>
-            );
-          })}
-        </div>
-      ) : (
-        <MaquettePlaceholder />
-      )}
+      <div
+        className={`grid gap-3 ${
+          configs.length === 1
+            ? 'grid-cols-1 sm:max-w-md'
+            : 'grid-cols-1 sm:grid-cols-2'
+        }`}
+      >
+        {configs.map((cfg) => (
+          <MockupCanvas key={cfg.url} config={cfg} mode={mode} logoUrl={logoUrl} />
+        ))}
+      </div>
     </section>
   );
 }
 
-function MaquettePlaceholder() {
-  const { t } = useT();
-  return (
-    <div
-      className="rounded-[var(--qw-input-radius)] p-6 sm:p-10 text-center space-y-2"
-      style={{
-        background: 'var(--qw-cream)',
-        border: '1px dashed var(--qw-cream-strong)',
-      }}
-    >
-      <div className="text-sm font-semibold text-ink">{t('preview.soon_title')}</div>
-      <p className="text-xs text-ink-soft max-w-prose mx-auto">{t('preview.soon_body')}</p>
-    </div>
-  );
+function drawLogoInBox(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement,
+  box: { x: number; y: number; w: number; h: number },
+  whiteInkOnly: boolean | undefined,
+) {
+  const ratio = logoImg.naturalWidth / logoImg.naturalHeight || 1;
+  let lW = box.w;
+  let lH = lW / ratio;
+  if (lH > box.h) {
+    lH = box.h;
+    lW = lH * ratio;
+  }
+  const dx = box.x + (box.w - lW) / 2;
+  const dy = box.y + (box.h - lH) / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(box.x, box.y, box.w, box.h);
+  ctx.clip();
+
+  if (whiteInkOnly) {
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.round(lW));
+    off.height = Math.max(1, Math.round(lH));
+    const octx = off.getContext('2d');
+    if (octx) {
+      octx.drawImage(logoImg, 0, 0, lW, lH);
+      octx.globalCompositeOperation = 'source-in';
+      octx.fillStyle = '#ffffff';
+      octx.fillRect(0, 0, lW, lH);
+    }
+    ctx.drawImage(off, dx, dy);
+  } else {
+    ctx.drawImage(logoImg, dx, dy, lW, lH);
+  }
+  ctx.restore();
 }
 
 function MockupCanvas({
-  bg,
+  config,
+  mode,
   logoUrl,
 }: {
-  bg: MockupBackground;
+  config: MaquetteConfig;
+  mode: PreviewMode;
   logoUrl: string | null;
 }) {
   const { t } = useT();
@@ -308,13 +261,13 @@ function MockupCanvas({
 
     const bgImg = new Image();
     bgImg.crossOrigin = 'anonymous';
-    bgImg.src = bg.url;
+    bgImg.src = config.url;
 
     const logoImg = new Image();
     logoImg.crossOrigin = 'anonymous';
     logoImg.src = logoUrl;
 
-    const both = Promise.all([
+    Promise.all([
       new Promise<void>((res, rej) => {
         bgImg.onload = () => res();
         bgImg.onerror = () => rej(new Error(t('preview.bg_not_loadable')));
@@ -323,13 +276,10 @@ function MockupCanvas({
         logoImg.onload = () => res();
         logoImg.onerror = () => rej(new Error(t('preview.logo_not_readable')));
       }),
-    ]);
-
-    both
+    ])
       .then(() => {
         if (cancelled) return;
-        // Cap la taille canvas à 800px de large pour rester léger.
-        const MAX_W = 800;
+        const MAX_W = 900;
         const scale = Math.min(1, MAX_W / bgImg.naturalWidth);
         const W = Math.round(bgImg.naturalWidth * scale);
         const H = Math.round(bgImg.naturalHeight * scale);
@@ -340,50 +290,23 @@ function MockupCanvas({
         ctx.clearRect(0, 0, W, H);
         ctx.drawImage(bgImg, 0, 0, W, H);
 
-        // Boîte de marquage en pixels.
-        const boxX = bg.logoBox.x * W;
-        const boxY = bg.logoBox.y * H;
-        const boxW = bg.logoBox.w * W;
-        const boxH = bg.logoBox.h * H;
+        const toPx = (b: BoxRel) => ({
+          x: b.x * W,
+          y: b.y * H,
+          w: b.w * W,
+          h: b.h * H,
+        });
 
-        // Calcule la taille du logo "contain" dans la zone (préserve ratio).
-        const ratio = logoImg.naturalWidth / logoImg.naturalHeight || 1;
-        let lW = boxW;
-        let lH = lW / ratio;
-        if (lH > boxH) {
-          lH = boxH;
-          lW = lH * ratio;
+        // 3D : un logo au centre de l'oshibori.
+        // Maquette : zone d'impression + duplicate au centre.
+        const boxes =
+          mode === '3d'
+            ? [toPx(config.centerBox)]
+            : [toPx(config.printZoneBox), toPx(config.centerBox)];
+
+        for (const box of boxes) {
+          drawLogoInBox(ctx, logoImg, box, config.whiteInkOnly);
         }
-        const dx = boxX + (boxW - lW) / 2;
-        const dy = boxY + (boxH - lH) / 2;
-
-        // CLIP au rectangle de la zone d'impression : même si les
-        // coordonnées sont mal calibrées, le logo ne peut PAS dépasser
-        // de la zone (le contenu hors zone est rogné).
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(boxX, boxY, boxW, boxH);
-        ctx.clip();
-
-        if (bg.whiteInkOnly) {
-          // Emballage noir → impression encre blanche uniquement. On
-          // dessine d'abord le logo, puis on remplit-in en blanc via
-          // source-in pour ne garder que la silhouette en blanc.
-          const off = document.createElement('canvas');
-          off.width = Math.max(1, Math.round(lW));
-          off.height = Math.max(1, Math.round(lH));
-          const octx = off.getContext('2d');
-          if (octx) {
-            octx.drawImage(logoImg, 0, 0, lW, lH);
-            octx.globalCompositeOperation = 'source-in';
-            octx.fillStyle = '#ffffff';
-            octx.fillRect(0, 0, lW, lH);
-          }
-          ctx.drawImage(off, dx, dy);
-        } else {
-          ctx.drawImage(logoImg, dx, dy, lW, lH);
-        }
-        ctx.restore();
 
         setReady(true);
       })
@@ -395,16 +318,15 @@ function MockupCanvas({
     return () => {
       cancelled = true;
     };
-  }, [bg, logoUrl]);
+  }, [config, mode, logoUrl, t]);
 
-  const alt = t(bg.altKey);
+  const alt = t(config.altKey);
   return (
     <figure className="space-y-1.5">
-      <div className="aspect-square w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)] relative">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+      <div className="w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)] relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-full object-contain"
+          className="w-full h-auto block"
           aria-label={alt}
         />
         {!ready && !err && (
@@ -420,7 +342,7 @@ function MockupCanvas({
       </div>
       <figcaption className="text-[11px] text-ink-soft text-center">
         {alt}
-        {bg.whiteInkOnly && ` ${t('preview.white_ink_only')}`}
+        {config.whiteInkOnly && ` ${t('preview.white_ink_only')}`}
       </figcaption>
     </figure>
   );

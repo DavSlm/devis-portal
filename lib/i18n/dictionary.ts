@@ -162,6 +162,8 @@ export interface Translations {
     th_from: string;
     th_unit: string;
     th_savings: string;
+    per_unit_suffix: string;
+    per_plateau_suffix: string;
     prices_note: string;
     engagements_title: string;
     eng_made_title: string;
@@ -441,6 +443,8 @@ export const fr: Translations = {
     th_from: 'À partir de',
     th_unit: 'Prix unitaire',
     th_savings: 'Économie',
+    per_unit_suffix: '/u',
+    per_plateau_suffix: '/plateau',
     prices_note: 'Prix HT, EXW France · transport en sus, devis détaillé sous 24 h.',
     engagements_title: 'Nos engagements',
     eng_made_title: 'Fabriqué en France',
@@ -724,6 +728,8 @@ export const en: Translations = {
     th_from: 'From',
     th_unit: 'Unit price',
     th_savings: 'Savings',
+    per_unit_suffix: '/u',
+    per_plateau_suffix: '/tray',
     prices_note: 'Excl. VAT, EXW France · shipping extra, detailed quote within 24h.',
     engagements_title: 'Our commitments',
     eng_made_title: 'Made in France',

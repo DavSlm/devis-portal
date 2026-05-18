@@ -58,12 +58,15 @@ interface Tier {
   min: number;
   /** Prix unitaire (€ / unité) */
   unit: number;
+  /** Nombre de cartons minimum — défini uniquement pour les plateaux. */
+  minCartons?: number;
 }
 
 function buildTiers(state: WizardState): Tier[] {
   if (isPlateauxCategory(state)) {
     return PRICING_PLATEAUX.map((t) => ({
       min: t.minCartons * 48,
+      minCartons: t.minCartons,
       // Prix carton → prix plateau (1 carton = 48 plateaux)
       unit: t.price / 48,
     }));
@@ -310,19 +313,19 @@ export function StepQuantity() {
                 </tr>
               </thead>
               <tbody>
-                {tiers.map((t, i) => {
+                {tiers.map((tier, i) => {
                   const active = i === activeTierIdx;
                   return (
                     <tr
-                      key={t.min}
+                      key={tier.min}
                       onClick={() =>
                         set({
                           quantity: snap(
-                            t.min,
+                            tier.min,
                             rule.multiple,
                             sliderBounds.min,
-                            // l'input numérique reste libre, donc on tape t.min direct
-                            Math.max(sliderBounds.max, t.min),
+                            // l'input numérique reste libre, donc on tape tier.min direct
+                            Math.max(sliderBounds.max, tier.min),
                           ),
                         })
                       }
@@ -341,15 +344,28 @@ export function StepQuantity() {
                               style={{ background: 'var(--qw-gold)' }}
                             />
                           )}
-                          ≥ {fmtNum(t.min)}
+                          {tier.minCartons != null ? (
+                            <>
+                              ≥ {fmtNum(tier.minCartons)}{' '}
+                              <span className="text-ink-soft font-normal">
+                                {t(tier.minCartons > 1 ? 'validation.cartons' : 'validation.carton')}
+                              </span>
+                            </>
+                          ) : (
+                            <>≥ {fmtNum(tier.min)}</>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 tabular-nums">
-                        <strong className="font-semibold">{formatEuro(t.unit)}</strong>
-                        <span className="text-ink-soft">/u</span>
+                        <strong className="font-semibold">{formatEuro(tier.unit)}</strong>
+                        <span className="text-ink-soft">
+                          {isPlateaux
+                            ? t('quantity.per_plateau_suffix')
+                            : t('quantity.per_unit_suffix')}
+                        </span>
                       </td>
                       <td className="px-4 py-2.5 text-right text-xs text-ink-soft tabular-nums">
-                        {savings(t.unit)}
+                        {savings(tier.unit)}
                       </td>
                     </tr>
                   );
