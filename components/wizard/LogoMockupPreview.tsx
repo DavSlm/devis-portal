@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WizardState } from '@/types/wizard';
 import { CDN } from '@/lib/pricing/data';
 
+type PreviewMode = '3d' | 'flat';
+
 // =====================================================
 // Compositeur de prévisualisation logo (niveau 1).
 //
@@ -25,23 +27,26 @@ interface MockupBackground {
   whiteInkOnly?: boolean;
 }
 
+// Zones d'impression resserrées + clip côté canvas pour garantir le
+// non-débordement. Coordonnées relatives à recalibrer dès que David
+// envoie son fichier Illustrator (les vraies bounding boxes y sont).
 const SEMI_15G_BLANC: MockupBackground = {
   url: `${CDN}oshiboripersonnalisable4_aedcffbf-7e56-42ac-8ecb-1458ea26c870.png?v=1704812853`,
   alt: 'Emballage semi-perso 15g blanc',
-  logoBox: { x: 0.28, y: 0.42, w: 0.44, h: 0.22 },
+  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
 const SEMI_15G_NOIR: MockupBackground = {
   url: `${CDN}oshiboripersonnalisable3_787af666-ab22-457c-a60d-6db48eecaeaf.png?v=1704813143`,
   alt: 'Emballage semi-perso 15g noir',
-  logoBox: { x: 0.28, y: 0.42, w: 0.44, h: 0.22 },
+  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
   whiteInkOnly: true,
 };
 
 const SEMI_15G_TRANSPARENT: MockupBackground = {
   url: `${CDN}oshiboripersoclear.png?v=1704818907`,
   alt: 'Emballage semi-perso 15g transparent',
-  logoBox: { x: 0.28, y: 0.42, w: 0.44, h: 0.22 },
+  logoBox: { x: 0.36, y: 0.46, w: 0.28, h: 0.14 },
 };
 
 /**
@@ -115,9 +120,21 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
     );
   }
 
+  return <MockupPreviewBody backgrounds={backgrounds} logoUrl={logoUrl} />;
+}
+
+function MockupPreviewBody({
+  backgrounds,
+  logoUrl,
+}: {
+  backgrounds: MockupBackground[];
+  logoUrl: string | null;
+}) {
+  const [mode, setMode] = useState<PreviewMode>('3d');
+
   return (
     <section className="space-y-3 pt-4 border-t border-[var(--qw-cream-strong)]">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="text-xs uppercase tracking-[0.08em] font-semibold text-gold-dark">
           Aperçu de votre marquage
         </h3>
@@ -125,20 +142,70 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
           Maquette indicative — le rendu final dépend de la matière et de l&apos;impression.
         </span>
       </div>
-      <div
-        className={`grid gap-3 ${
-          backgrounds.length === 1
-            ? 'grid-cols-1 sm:max-w-sm'
-            : backgrounds.length === 2
-              ? 'grid-cols-1 sm:grid-cols-2'
-              : 'grid-cols-1 sm:grid-cols-3'
-        }`}
-      >
-        {backgrounds.map((bg) => (
-          <MockupCanvas key={bg.url} bg={bg} logoUrl={logoUrl} />
-        ))}
+
+      <div className="inline-flex rounded-full border border-[var(--qw-cream-strong)] bg-white p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setMode('3d')}
+          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+            mode === '3d'
+              ? 'bg-[var(--qw-gold)] text-white'
+              : 'text-ink-soft hover:text-ink'
+          }`}
+        >
+          Vue 3D
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('flat')}
+          className={`px-3.5 py-1.5 rounded-full font-medium transition-colors ${
+            mode === 'flat'
+              ? 'bg-[var(--qw-gold)] text-white'
+              : 'text-ink-soft hover:text-ink'
+          }`}
+        >
+          Vue à plat
+        </button>
       </div>
+
+      {mode === '3d' ? (
+        <div
+          className={`grid gap-3 ${
+            backgrounds.length === 1
+              ? 'grid-cols-1 sm:max-w-sm'
+              : backgrounds.length === 2
+                ? 'grid-cols-1 sm:grid-cols-2'
+                : 'grid-cols-1 sm:grid-cols-3'
+          }`}
+        >
+          {backgrounds.map((bg) => (
+            <MockupCanvas key={bg.url} bg={bg} logoUrl={logoUrl} />
+          ))}
+        </div>
+      ) : (
+        <FlatMockupPlaceholder />
+      )}
     </section>
+  );
+}
+
+function FlatMockupPlaceholder() {
+  return (
+    <div
+      className="rounded-[var(--qw-input-radius)] p-6 sm:p-10 text-center space-y-2"
+      style={{
+        background: 'var(--qw-cream)',
+        border: '1px dashed var(--qw-cream-strong)',
+      }}
+    >
+      <div className="text-sm font-semibold text-ink">Vue à plat — bientôt disponible</div>
+      <p className="text-xs text-ink-soft max-w-prose mx-auto">
+        Une maquette technique à plat (dieline Illustrator) avec ton logo positionné
+        sur l&apos;emballage déplié sera disponible ici très prochainement.
+        Cela te permettra de visualiser <em>exactement</em> les marges et la zone
+        d&apos;impression avant production.
+      </p>
+    </div>
   );
 }
 
@@ -202,46 +269,44 @@ function MockupCanvas({
         const boxW = bg.logoBox.w * W;
         const boxH = bg.logoBox.h * H;
 
-        // Si encre blanche uniquement (emballage noir), on inverse le logo
-        // en blanc via destination-in. Hack visuel basique.
+        // Calcule la taille du logo "contain" dans la zone (préserve ratio).
+        const ratio = logoImg.naturalWidth / logoImg.naturalHeight || 1;
+        let lW = boxW;
+        let lH = lW / ratio;
+        if (lH > boxH) {
+          lH = boxH;
+          lW = lH * ratio;
+        }
+        const dx = boxX + (boxW - lW) / 2;
+        const dy = boxY + (boxH - lH) / 2;
+
+        // CLIP au rectangle de la zone d'impression : même si les
+        // coordonnées sont mal calibrées, le logo ne peut PAS dépasser
+        // de la zone (le contenu hors zone est rogné).
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(boxX, boxY, boxW, boxH);
+        ctx.clip();
+
         if (bg.whiteInkOnly) {
-          // Crée un canvas off-screen pour appliquer le filtre.
+          // Emballage noir → impression encre blanche uniquement. On
+          // dessine d'abord le logo, puis on remplit-in en blanc via
+          // source-in pour ne garder que la silhouette en blanc.
           const off = document.createElement('canvas');
-          const ratio =
-            logoImg.naturalWidth / logoImg.naturalHeight || 1;
-          let lW = boxW;
-          let lH = lW / ratio;
-          if (lH > boxH) {
-            lH = boxH;
-            lW = lH * ratio;
-          }
-          off.width = Math.round(lW);
-          off.height = Math.round(lH);
+          off.width = Math.max(1, Math.round(lW));
+          off.height = Math.max(1, Math.round(lH));
           const octx = off.getContext('2d');
           if (octx) {
             octx.drawImage(logoImg, 0, 0, lW, lH);
-            // Tout ce qui est non-transparent devient blanc.
             octx.globalCompositeOperation = 'source-in';
             octx.fillStyle = '#ffffff';
             octx.fillRect(0, 0, lW, lH);
           }
-          const dx = boxX + (boxW - lW) / 2;
-          const dy = boxY + (boxH - lH) / 2;
           ctx.drawImage(off, dx, dy);
         } else {
-          // Logo couleur, scale to fit (contain).
-          const ratio =
-            logoImg.naturalWidth / logoImg.naturalHeight || 1;
-          let lW = boxW;
-          let lH = lW / ratio;
-          if (lH > boxH) {
-            lH = boxH;
-            lW = lH * ratio;
-          }
-          const dx = boxX + (boxW - lW) / 2;
-          const dy = boxY + (boxH - lH) / 2;
           ctx.drawImage(logoImg, dx, dy, lW, lH);
         }
+        ctx.restore();
 
         setReady(true);
       })
