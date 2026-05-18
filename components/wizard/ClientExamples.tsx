@@ -2,15 +2,15 @@
 
 /**
  * Galerie d'exemples clients affichée sous la sélection de grammage en
- * mode Semi-perso ou Full perso. Les images sont des URLs CDN à
- * remplir par David — tant qu'elles valent 'TODO', un placeholder
- * « Image à venir » est rendu pour que la mise en page reste propre.
+ * mode Semi-perso ou Full perso. Tant que `img === 'TODO'`, un
+ * placeholder « Image à venir » est rendu pour que la mise en page
+ * reste propre.
  *
- * Quand tu veux remplir les visuels :
- *  1. Uploade tes JPG/PNG sur le CDN Shopify (cf. les autres images)
- *  2. Remplace l'entrée correspondante dans EXAMPLES par l'URL.
- *  3. Ajuste `caption` si tu veux dire qui c'est ("Hôtel X · 15g full").
+ * Pour ajouter un nouvel exemple : upload l'image sur le CDN Shopify
+ * (même bucket que les autres) puis push une entrée { img, caption }.
  */
+
+import { CDN } from '@/lib/pricing/data';
 
 interface Example {
   img: string;
@@ -24,10 +24,12 @@ const EXAMPLES_SEMI: Example[] = [
 ];
 
 const EXAMPLES_FULL: Example[] = [
-  { img: 'TODO', caption: 'Exemple full perso 1' },
-  { img: 'TODO', caption: 'Exemple full perso 2' },
-  { img: 'TODO', caption: 'Exemple full perso 3' },
-  { img: 'TODO', caption: 'Exemple full perso 4' },
+  { img: `${CDN}arev.png?v=1734850751`, caption: 'AREV' },
+  { img: `${CDN}Air_senegal.png?v=1734850752`, caption: 'Air Sénégal' },
+  { img: `${CDN}Rosewood_dae0ad50-8371-4347-8abd-f59c2f5ce056.png?v=1734850751`, caption: 'Rosewood' },
+  { img: `${CDN}atlantis_the_royal.png?v=1711552312`, caption: 'Atlantis The Royal' },
+  { img: `${CDN}mila_group.png?v=1711552360`, caption: 'Mila Group' },
+  { img: `${CDN}peninsula.png?v=1711552611`, caption: 'Peninsula' },
 ];
 
 export function ClientExamples({
