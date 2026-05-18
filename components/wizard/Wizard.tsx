@@ -4,6 +4,7 @@ import { WizardProvider, useWizard } from './WizardProvider';
 import { useDraftAutoSave } from './useDraftAutoSave';
 import { ProgressBar } from './ProgressBar';
 import { NavBar } from './NavBar';
+import { WizardSidebar } from './WizardSidebar';
 import { StepProfile } from './steps/StepProfile';
 import { StepProductType } from './steps/StepProductType';
 import { StepPersoLevel } from './steps/StepPersoLevel';
@@ -62,24 +63,27 @@ function WizardContent() {
       {/* Main scrollable area */}
       <main className="flex-1 overflow-y-auto overscroll-contain">
         <div
-          className="mx-auto max-w-3xl w-full px-4 sm:px-6 py-6 sm:py-10"
+          className="mx-auto max-w-6xl w-full flex gap-6 lg:gap-10"
           style={{
             paddingLeft: 'max(1rem, env(safe-area-inset-left))',
             paddingRight: 'max(1rem, env(safe-area-inset-right))',
           }}
         >
-          {currentStep === 'profile' && <StepProfile />}
-          {currentStep === 'product-type' && <StepProductType />}
-          {currentStep === 'perso-level' && <StepPersoLevel />}
-          {currentStep === 'category-neutre' && <StepCategoryNeutre />}
-          {currentStep === 'grammage' && <StepGrammage />}
-          {currentStep === 'matiere-full-15g' && <StepMatiere />}
-          {currentStep === 'scenteur-full' && <StepScent />}
-          {currentStep === 'packaging' && <StepPackaging />}
-          {currentStep === 'brief' && <StepBrief />}
-          {currentStep === 'quantity' && <StepQuantity />}
-          {currentStep === 'shipping' && <StepShipping />}
-          {currentStep === 'summary' && <StepSummary />}
+          <div className="flex-1 min-w-0 max-w-3xl mx-auto lg:mx-0 lg:ml-auto px-4 sm:px-6 py-6 sm:py-10">
+            {currentStep === 'profile' && <StepProfile />}
+            {currentStep === 'product-type' && <StepProductType />}
+            {currentStep === 'perso-level' && <StepPersoLevel />}
+            {currentStep === 'category-neutre' && <StepCategoryNeutre />}
+            {currentStep === 'grammage' && <StepGrammage />}
+            {currentStep === 'matiere-full-15g' && <StepMatiere />}
+            {currentStep === 'scenteur-full' && <StepScent />}
+            {currentStep === 'packaging' && <StepPackaging />}
+            {currentStep === 'brief' && <StepBrief />}
+            {currentStep === 'quantity' && <StepQuantity />}
+            {currentStep === 'shipping' && <StepShipping />}
+            {currentStep === 'summary' && <StepSummary />}
+          </div>
+          <WizardSidebar />
         </div>
       </main>
 
