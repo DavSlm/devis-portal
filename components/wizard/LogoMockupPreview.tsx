@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WizardState } from '@/types/wizard';
 import { CDN } from '@/lib/pricing/data';
+import {
+  DIELINE_SEMI_15G_BLANC,
+  DIELINE_SEMI_15G_NOIR,
+  DIELINE_SEMI_15G_TRANSPARENT,
+  FlatDieline,
+  type DielineConfig,
+} from './FlatDieline';
 
 type PreviewMode = '3d' | 'flat';
 
@@ -55,6 +62,31 @@ const SEMI_15G_TRANSPARENT: MockupBackground = {
  * et 10g semi, on remontera des mockups plus tard quand David aura
  * fourni les visuels packaging dédiés.
  */
+/**
+ * Sélectionne les dielines à plat disponibles selon la config wizard.
+ * Pour le MVP : 15g semi-perso (blanc / noir / transparent) — couvert
+ * par 15g Thé Blanc - Maquette.pdf. Pour les autres combos, on retombera
+ * sur le placeholder « bientôt disponible ».
+ */
+function selectDielines(state: WizardState): DielineConfig[] {
+  if (state.persoLevel !== 'Semi-perso' && state.persoLevel !== 'Full perso') {
+    return [];
+  }
+  if (state.grammage === '15 grammes') {
+    if (state.packagingId === 'semi-15g-noir') return [DIELINE_SEMI_15G_NOIR];
+    if (state.packagingId === 'semi-15g-transparent')
+      return [DIELINE_SEMI_15G_TRANSPARENT];
+    if (state.packagingId === 'semi-15g-blanc') return [DIELINE_SEMI_15G_BLANC];
+    // Pas encore de packaging choisi → on montre les 3.
+    return [
+      DIELINE_SEMI_15G_BLANC,
+      DIELINE_SEMI_15G_NOIR,
+      DIELINE_SEMI_15G_TRANSPARENT,
+    ];
+  }
+  return [];
+}
+
 function selectBackgrounds(state: WizardState): MockupBackground[] {
   if (state.persoLevel !== 'Semi-perso' && state.persoLevel !== 'Full perso') {
     return [];
@@ -123,14 +155,23 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
     );
   }
 
-  return <MockupPreviewBody backgrounds={backgrounds} logoUrl={logoUrl} />;
+  const dielines = useMemo(() => selectDielines(state), [state]);
+  return (
+    <MockupPreviewBody
+      backgrounds={backgrounds}
+      dielines={dielines}
+      logoUrl={logoUrl}
+    />
+  );
 }
 
 function MockupPreviewBody({
   backgrounds,
+  dielines,
   logoUrl,
 }: {
   backgrounds: MockupBackground[];
+  dielines: DielineConfig[];
   logoUrl: string | null;
 }) {
   const [mode, setMode] = useState<PreviewMode>('3d');
@@ -183,6 +224,18 @@ function MockupPreviewBody({
         >
           {backgrounds.map((bg) => (
             <MockupCanvas key={bg.url} bg={bg} logoUrl={logoUrl} />
+          ))}
+        </div>
+      ) : dielines.length > 0 ? (
+        <div
+          className={`grid gap-4 ${
+            dielines.length === 1
+              ? 'grid-cols-1'
+              : 'grid-cols-1 lg:grid-cols-2'
+          }`}
+        >
+          {dielines.map((d) => (
+            <FlatDieline key={d.label} config={d} logoUrl={logoUrl} />
           ))}
         </div>
       ) : (
