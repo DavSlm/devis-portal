@@ -4,22 +4,77 @@ import { useMemo } from 'react';
 import { useWizard } from '../WizardProvider';
 import { StepHeader } from './StepHeader';
 import {
-  computeSuggestions,
+  OPTIONS,
+  PRICING,
+  PRICING_PLATEAUX,
+  formatEuro,
   isPlateauxCategory,
-  priceLabelForQuantity,
+  pricingKey,
   quantityRule,
   validateQuantity,
 } from '@/lib/pricing';
+import type { WizardState } from '@/types/wizard';
+
+interface Tier {
+  /** Quantité minimale (en Oshibori ou plateaux selon contexte) */
+  min: number;
+  /** Prix unitaire (€ / unité) */
+  unit: number;
+}
+
+function buildTiers(state: WizardState): Tier[] {
+  if (isPlateauxCategory(state)) {
+    return PRICING_PLATEAUX.map((t) => ({
+      min: t.minCartons * 48,
+      // Prix carton → prix plateau (1 carton = 48 plateaux)
+      unit: t.price / 48,
+    }));
+  }
+  const key = pricingKey(state);
+  if (!key) return [];
+  // Surcharge bambou 15g + green formula appliquée à tous les paliers
+  // pour que le tableau reflète le vrai prix unitaire.
+  let bonus = 0;
+  if (
+    state.persoLevel === 'Full perso' &&
+    state.grammage === '15 grammes' &&
+    state.matiere === '80% Bambou - 20% Coton'
+  ) {
+    bonus += OPTIONS.bambou15g;
+  }
+  if (state.greenFormula) bonus += OPTIONS.greenFormula;
+  return PRICING[key].map((t) => ({ min: t.min, unit: t.price + bonus }));
+}
+
+/** Snap `value` au multiple le plus proche, borné dans [min, max]. */
+function snap(value: number, multiple: number, min: number, max: number): number {
+  const v = Math.round(value / multiple) * multiple;
+  return Math.max(min, Math.min(max, v));
+}
 
 export function StepQuantity() {
   const { state, set } = useWizard();
 
   const rule = useMemo(() => quantityRule(state), [state]);
-  const suggestions = useMemo(() => computeSuggestions(state, rule), [state, rule]);
+  const tiers = useMemo(() => buildTiers(state), [state]);
   const validation = useMemo(() => validateQuantity(state), [state]);
   const isPlateaux = isPlateauxCategory(state);
   const showAdvantages = state.productType === 'Oshibori';
   const showDluShelf = state.productType === 'Oshibori' && state.persoLevel === 'Full perso';
+
+  // Bornes slider :
+  //   - min = rule.min
+  //   - max = rule.max OU dernier palier × 1.5 (arrondi au multiple)
+  //   - si rien : 25 000 par défaut
+  const sliderBounds = useMemo(() => {
+    const min = rule.min;
+    const lastTier = tiers.length > 0 ? tiers[tiers.length - 1].min : 0;
+    let max =
+      rule.max ??
+      (lastTier > 0 ? Math.round((lastTier * 1.5) / rule.multiple) * rule.multiple : 25000);
+    if (max <= min) max = min + rule.multiple * 10;
+    return { min, max };
+  }, [rule, tiers]);
 
   const inc = () => {
     const next = (state.quantity ?? 0) + rule.multiple;
@@ -29,6 +84,48 @@ export function StepQuantity() {
     const next = Math.max(0, (state.quantity ?? 0) - rule.multiple);
     set({ quantity: next || null });
   };
+
+  // Quantité affichée par le slider : si state.quantity n'est pas
+  // initialisée, on cale sur rule.min pour que le curseur ait une
+  // position visible. Sinon on borne dans le range du slider (l'input
+  // numérique reste libre au-delà du max d'affichage).
+  const sliderValue = useMemo(() => {
+    const q = state.quantity ?? sliderBounds.min;
+    return Math.max(sliderBounds.min, Math.min(sliderBounds.max, q));
+  }, [state.quantity, sliderBounds]);
+
+  // Index du palier actif (le plus grand min qui est ≤ quantité).
+  const activeTierIdx = useMemo(() => {
+    const q = state.quantity ?? 0;
+    let idx = -1;
+    for (let i = 0; i < tiers.length; i++) {
+      if (q >= tiers[i].min) idx = i;
+    }
+    return idx;
+  }, [state.quantity, tiers]);
+
+  // Économie en % vs le 1er palier
+  const savings = (unit: number): string => {
+    if (tiers.length === 0) return '';
+    const baseline = tiers[0].unit;
+    if (unit >= baseline) return '—';
+    const pct = Math.round(((baseline - unit) / baseline) * 100);
+    return `-${pct} %`;
+  };
+
+  // Ticks visibles sous le slider : tous les paliers qui tombent dans
+  // [sliderBounds.min, sliderBounds.max].
+  const tickValues = useMemo(() => {
+    const ticks: number[] = [sliderBounds.min];
+    for (const t of tiers) {
+      if (t.min > sliderBounds.min && t.min < sliderBounds.max) ticks.push(t.min);
+    }
+    ticks.push(sliderBounds.max);
+    return Array.from(new Set(ticks)).sort((a, b) => a - b);
+  }, [tiers, sliderBounds]);
+
+  const tickPercent = (v: number) =>
+    ((v - sliderBounds.min) / (sliderBounds.max - sliderBounds.min)) * 100;
 
   return (
     <div className="space-y-8">
@@ -48,6 +145,57 @@ export function StepQuantity() {
         </p>
       )}
 
+      {/* Slider de quantité */}
+      <div className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <span className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-soft">
+            Quantité
+          </span>
+          <span className="font-semibold text-ink text-lg tabular-nums">
+            {(state.quantity ?? sliderBounds.min).toLocaleString('fr-FR')}{' '}
+            <span className="text-xs text-ink-soft font-normal">
+              {isPlateaux ? 'plateaux' : 'unités'}
+            </span>
+          </span>
+        </div>
+        <div className="relative pt-1 pb-6">
+          <input
+            type="range"
+            min={sliderBounds.min}
+            max={sliderBounds.max}
+            step={rule.multiple}
+            value={sliderValue}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              if (!Number.isFinite(v)) return;
+              set({ quantity: snap(v, rule.multiple, sliderBounds.min, sliderBounds.max) });
+            }}
+            aria-label="Sélecteur de quantité"
+            className="qw-range w-full"
+          />
+          {/* Ticks */}
+          <div className="absolute inset-x-0 top-6 pointer-events-none">
+            {tickValues.map((v) => (
+              <span
+                key={v}
+                className="absolute -translate-x-1/2 block"
+                style={{ left: `${tickPercent(v)}%` }}
+              >
+                <span className="block w-px h-2 bg-[var(--qw-cream-strong)] mx-auto" />
+                <span
+                  className={`block mt-1 text-[10px] whitespace-nowrap ${
+                    v === state.quantity ? 'text-gold-dark font-semibold' : 'text-ink-soft'
+                  }`}
+                >
+                  {v.toLocaleString('fr-FR')}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* +/− input pour saisie précise */}
       <div className="flex items-center gap-3 justify-center">
         <button
           type="button"
@@ -83,38 +231,73 @@ export function StepQuantity() {
         </button>
       </div>
 
-      {suggestions.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2">
-          {suggestions.map((v) => {
-            const qtyLabel = `${v.toLocaleString('fr-FR')} ${
-              isPlateaux ? 'plateaux' : 'Oshibori'
-            }`;
-            const priceLabel = priceLabelForQuantity(state, v);
-            return (
-              <button
-                key={v}
-                type="button"
-                onClick={() => set({ quantity: v })}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-full border text-sm transition-all ${
-                  state.quantity === v
-                    ? 'border-[var(--qw-gold-dark)] bg-[var(--qw-cream)]'
-                    : 'border-[var(--qw-border-soft)] bg-white hover:border-[var(--qw-gold)]'
-                }`}
-              >
-                <span className="font-medium">{qtyLabel}</span>
-                {priceLabel && (
-                  <span className="text-xs text-ink-soft">{priceLabel}</span>
-                )}
-              </button>
-            );
-          })}
+      {/* Tableau paliers volume */}
+      {tiers.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-[11px] uppercase tracking-[0.08em] font-semibold text-ink-soft">
+            Paliers volume
+          </h3>
+          <div className="rounded-[var(--qw-input-radius)] border border-[var(--qw-cream-strong)] overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-[11px] uppercase tracking-[0.06em] text-ink-soft bg-[var(--qw-cream)]/40">
+                  <th className="text-left font-medium px-4 py-2.5">À partir de</th>
+                  <th className="text-left font-medium px-4 py-2.5">Prix unitaire</th>
+                  <th className="text-right font-medium px-4 py-2.5">Économie</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tiers.map((t, i) => {
+                  const active = i === activeTierIdx;
+                  return (
+                    <tr
+                      key={t.min}
+                      onClick={() =>
+                        set({
+                          quantity: snap(
+                            t.min,
+                            rule.multiple,
+                            sliderBounds.min,
+                            // l'input numérique reste libre, donc on tape t.min direct
+                            Math.max(sliderBounds.max, t.min),
+                          ),
+                        })
+                      }
+                      className={`cursor-pointer transition-colors ${
+                        active
+                          ? 'bg-[var(--qw-cream)]'
+                          : 'hover:bg-[var(--qw-cream)]/30'
+                      } ${i > 0 ? 'border-t border-[var(--qw-cream-strong)]' : ''}`}
+                    >
+                      <td className="px-4 py-2.5 font-medium">
+                        <span className="inline-flex items-center gap-2">
+                          {active && (
+                            <span
+                              aria-hidden="true"
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{ background: 'var(--qw-gold)' }}
+                            />
+                          )}
+                          ≥ {t.min.toLocaleString('fr-FR')}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 tabular-nums">
+                        <strong className="font-semibold">{formatEuro(t.unit)}</strong>
+                        <span className="text-ink-soft">/u</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-xs text-ink-soft tabular-nums">
+                        {savings(t.unit)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[11px] italic text-ink-soft">
+            Prix HT, EXW France · transport en sus, devis détaillé sous 24 h.
+          </p>
         </div>
-      )}
-
-      {suggestions.length > 0 && (
-        <p className="text-center text-xs italic text-ink-soft">
-          Prix HT, EXW France · transport en sus, devis détaillé sous 24 h.
-        </p>
       )}
 
       <p
@@ -167,3 +350,4 @@ function Advantages() {
     </section>
   );
 }
+

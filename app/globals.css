@@ -141,6 +141,55 @@ button:focus-visible {
   color: var(--qw-error);
 }
 
+/* Range slider — thème gold cohérent avec qw-input */
+.qw-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--qw-cream-strong);
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+}
+.qw-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--qw-gold);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+  transition: transform var(--qw-speed) var(--qw-easing),
+    box-shadow var(--qw-speed) var(--qw-easing);
+}
+.qw-range::-webkit-slider-thumb:hover {
+  transform: scale(1.08);
+}
+.qw-range:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  box-shadow: 0 0 0 4px rgba(209, 183, 128, 0.18);
+}
+.qw-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--qw-gold);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  cursor: grab;
+}
+.qw-range::-moz-range-track {
+  height: 6px;
+  background: var(--qw-cream-strong);
+  border-radius: 999px;
+}
+.qw-range:focus-visible {
+  outline: 2px solid var(--qw-gold);
+  outline-offset: 4px;
+}
+
 .qw-card-pick {
   display: flex;
   flex-direction: column;
