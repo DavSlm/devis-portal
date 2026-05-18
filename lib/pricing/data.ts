@@ -97,10 +97,8 @@ export const PACKAGINGS: {
       { id: 'semi-15g-transparent', label: 'Emballage Transparent', sub: 'Parfum Thé Blanc', pack: 'transparent', img: `${CDN}oshiboripersoclear.png?v=1704818907` },
     ],
     '10 grammes': [
-      // TODO : fournir les visuels semi-perso 10g (blanc + noir). Tant que
-      // img === 'TODO', PickCard rend un placeholder "Image à venir".
-      { id: 'semi-10g-blanc-tb', label: 'Emballage Blanc', sub: 'Parfum Thé Blanc', pack: 'blanc', img: 'TODO' },
-      { id: 'semi-10g-noir-tv',  label: 'Emballage Noir',  sub: 'Parfum Thé Vert',  pack: 'noir',  img: 'TODO', note: 'Impression en encre blanche uniquement (logo et texte en blanc)' },
+      { id: 'semi-10g-blanc-tb', label: 'Emballage Blanc', sub: 'Parfum Thé Blanc', pack: 'blanc', img: `${CDN}10gBlanc.png?v=1688722926` },
+      { id: 'semi-10g-noir-tv',  label: 'Emballage Noir',  sub: 'Parfum Thé Vert',  pack: 'noir',  img: `${CDN}10gNoir.png?v=1688722925`, note: 'Impression en encre blanche uniquement (logo et texte en blanc)' },
     ],
   },
 };

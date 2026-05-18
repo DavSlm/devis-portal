@@ -145,6 +145,14 @@ export interface Packaging {
   note?: string;
 }
 
+export type QuantityRuleLabelCode =
+  | 'plateaux'
+  | 'neutre'
+  | 'semi'
+  | 'full_6g'
+  | 'full'
+  | '';
+
 export interface QuantityRule {
   multiple: number;
   box: number | null;
@@ -152,5 +160,16 @@ export interface QuantityRule {
   palletBoxes: number | null;
   min: number;
   max: number | null;
+  /** Phrase FR pré-calculée — conservée pour compat ascendante. */
   label: string;
+  /** Clé i18n + params (préférer côté UI). */
+  labelCode: QuantityRuleLabelCode;
+  labelParams?: Record<string, string | number>;
+}
+
+export interface PackagingPart {
+  count: number;
+  unitSize: number;
+  /** 'pallet' (palette) ou 'carton'. */
+  type: 'pallet' | 'carton';
 }

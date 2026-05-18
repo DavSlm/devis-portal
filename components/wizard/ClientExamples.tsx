@@ -18,9 +18,9 @@ interface Example {
 }
 
 const EXAMPLES_SEMI: Example[] = [
-  { img: 'TODO' },
-  { img: 'TODO' },
-  { img: 'TODO' },
+  { img: `${CDN}Capture_d_ecran_2023-09-06_a_22.10.42.webp?v=1694031095` },
+  { img: `${CDN}perso_203.webp?v=1693945029` },
+  { img: `${CDN}perso_205.webp?v=1693945029` },
 ];
 
 const EXAMPLES_FULL: Example[] = [

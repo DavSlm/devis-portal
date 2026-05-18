@@ -12,8 +12,37 @@ import {
   pricingKey,
   quantityRule,
   validateQuantity,
+  type QuantityValidation,
 } from '@/lib/pricing';
 import type { WizardState } from '@/types/wizard';
+
+type Translator = (path: string, vars?: Record<string, string | number>) => string;
+
+function formatValidation(
+  v: QuantityValidation,
+  t: Translator,
+  fmtNum: (n: number) => string,
+): string {
+  if (v.ok) {
+    if (!v.parts || v.parts.length === 0) return '';
+    const parts = v.parts.map((p) => {
+      const unitKey =
+        p.type === 'pallet'
+          ? p.count > 1
+            ? 'validation.pallets'
+            : 'validation.pallet'
+          : p.count > 1
+            ? 'validation.cartons'
+            : 'validation.carton';
+      return `${fmtNum(p.count)} ${t(unitKey)} ${t('validation.of_n_oshibori', { n: p.unitSize })}`;
+    });
+    return `✓ ${parts.join(' + ')}`;
+  }
+  const params = v.params ? { ...v.params } : undefined;
+  if (params && typeof params.min === 'number') params.min = fmtNum(params.min);
+  if (params && typeof params.max === 'number') params.max = fmtNum(params.max);
+  return t(`validation.${v.code}`, params);
+}
 import {
   AwardIcon,
   CalendarIcon,
@@ -154,7 +183,14 @@ export function StepQuantity() {
 
   return (
     <div className="space-y-8">
-      <StepHeader title={t('quantity.title')} subtitle={rule.label} />
+      <StepHeader
+        title={t('quantity.title')}
+        subtitle={
+          rule.labelCode
+            ? t(`validation.${rule.labelCode}_rule`, rule.labelParams)
+            : ''
+        }
+      />
 
       {showDluShelf && (
         <p
@@ -334,7 +370,7 @@ export function StepQuantity() {
               : 'text-ink-soft'
         }`}
       >
-        {validation.msg}
+        {formatValidation(validation, t, fmtNum)}
       </p>
 
       {showAdvantages && <Advantages />}

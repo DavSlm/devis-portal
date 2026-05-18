@@ -113,6 +113,7 @@ export function quantityRule(state: WizardState): QuantityRule {
         multiple, box, pallet, palletBoxes,
         min: 48, max: null,
         label: 'Plateaux 1×10 : multiple de 48 — un carton contient 48 plateaux.',
+        labelCode: 'plateaux',
       };
     }
     const gCap = g ? g.charAt(0).toUpperCase() + g.slice(1) : '';
@@ -120,6 +121,8 @@ export function quantityRule(state: WizardState): QuantityRule {
       multiple, box, pallet, palletBoxes,
       min: multiple, max: null,
       label: `${gCap} Neutres : multiple de ${multiple} Oshibori (${g} = ${multiple} Oshibori / carton).`,
+      labelCode: 'neutre',
+      labelParams: { gCap, g, multiple },
     };
   }
   if (l === 'Semi-perso') {
@@ -127,6 +130,7 @@ export function quantityRule(state: WizardState): QuantityRule {
       multiple, box, pallet, palletBoxes,
       min: 50, max: 17950,
       label: 'Semi Personnalisation : multiple de 50 Oshibori, entre 50 et 17 950 Oshibori.',
+      labelCode: 'semi',
     };
   }
   if (l === 'Full perso') {
@@ -135,15 +139,21 @@ export function quantityRule(state: WizardState): QuantityRule {
         multiple, box, pallet, palletBoxes,
         min: 30000, max: null,
         label: 'Full Personnalisation 6 grammes : multiple de 100, à partir de 30 000 Oshibori.',
+        labelCode: 'full_6g',
       };
     }
     return {
       multiple, box, pallet, palletBoxes,
       min: 18000, max: null,
       label: `Full Personnalisation ${g} : multiple de 50, à partir de 18 000 Oshibori.`,
+      labelCode: 'full',
+      labelParams: { g: g ?? '' },
     };
   }
-  return { multiple: 1, box: null, pallet: null, palletBoxes: null, min: 1, max: null, label: '' };
+  return {
+    multiple: 1, box: null, pallet: null, palletBoxes: null,
+    min: 1, max: null, label: '', labelCode: '',
+  };
 }
 
 // =====================================================
@@ -168,50 +178,89 @@ export function computeSuggestions(state: WizardState, r: QuantityRule): number[
 // Validation
 // =====================================================
 
+export type ValidationCode = 'minimum' | 'max_semi' | 'must_multiple' | 'ok';
+
 export interface QuantityValidation {
   ok: boolean;
+  /** Phrase FR pré-calculée (compat ascendante / serveur). */
   msg: string;
+  /** Clé i18n. */
+  code: ValidationCode;
+  /** Params à injecter dans la traduction. */
+  params?: Record<string, string | number>;
+  /** Décomposition palette/carton si ok=true. */
+  parts?: import('@/types/wizard').PackagingPart[];
 }
 
-export function describePackaging(quantity: number, r: QuantityRule): string {
-  if (!quantity) return '';
+export function describePackagingParts(
+  quantity: number,
+  r: QuantityRule,
+): import('@/types/wizard').PackagingPart[] {
+  if (!quantity) return [];
   let remaining = quantity;
-  const parts: string[] = [];
-  const fr = (n: number) => n.toLocaleString('fr-FR');
-
+  const out: import('@/types/wizard').PackagingPart[] = [];
   if (r.pallet && remaining >= r.pallet) {
     const n = Math.floor(remaining / r.pallet);
     remaining -= n * r.pallet;
-    parts.push(`${fr(n)} palette${n > 1 ? 's' : ''} de ${fr(r.pallet)} Oshibori`);
+    out.push({ count: n, unitSize: r.pallet, type: 'pallet' });
   }
   if (r.box && remaining >= r.box) {
     const n = Math.floor(remaining / r.box);
     remaining -= n * r.box;
-    parts.push(`${fr(n)} carton${n > 1 ? 's' : ''} de ${r.box} Oshibori`);
+    out.push({ count: n, unitSize: r.box, type: 'carton' });
   }
   if (remaining > 0) {
     const n = remaining / r.multiple;
-    parts.push(`${fr(n)} carton${n > 1 ? 's' : ''} de ${r.multiple} Oshibori`);
+    out.push({ count: n, unitSize: r.multiple, type: 'carton' });
   }
-  return parts.join(' + ');
+  return out;
+}
+
+export function describePackaging(quantity: number, r: QuantityRule): string {
+  const parts = describePackagingParts(quantity, r);
+  const fr = (n: number) => n.toLocaleString('fr-FR');
+  return parts
+    .map((p) =>
+      p.type === 'pallet'
+        ? `${fr(p.count)} palette${p.count > 1 ? 's' : ''} de ${fr(p.unitSize)} Oshibori`
+        : `${fr(p.count)} carton${p.count > 1 ? 's' : ''} de ${p.unitSize} Oshibori`,
+    )
+    .join(' + ');
 }
 
 export function validateQuantity(state: WizardState): QuantityValidation {
   const r = quantityRule(state);
   const q = state.quantity ?? 0;
   if (!q || q < r.min) {
-    return { ok: false, msg: `Minimum : ${r.min.toLocaleString('fr-FR')} Oshibori.` };
+    return {
+      ok: false,
+      code: 'minimum',
+      params: { min: r.min },
+      msg: `Minimum : ${r.min.toLocaleString('fr-FR')} Oshibori.`,
+    };
   }
   if (r.max && q > r.max) {
     return {
       ok: false,
+      code: 'max_semi',
+      params: { max: r.max },
       msg: `Maximum Semi Personnalisation : ${r.max.toLocaleString('fr-FR')} Oshibori. Au-delà, passez en Personnalisation Complète.`,
     };
   }
   if (q % r.multiple !== 0) {
-    return { ok: false, msg: `La quantité doit être un multiple de ${r.multiple}.` };
+    return {
+      ok: false,
+      code: 'must_multiple',
+      params: { multiple: r.multiple },
+      msg: `La quantité doit être un multiple de ${r.multiple}.`,
+    };
   }
-  return { ok: true, msg: `✓ ${describePackaging(q, r)}` };
+  return {
+    ok: true,
+    code: 'ok',
+    parts: describePackagingParts(q, r),
+    msg: `✓ ${describePackaging(q, r)}`,
+  };
 }
 
 // =====================================================

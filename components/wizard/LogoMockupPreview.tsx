@@ -3,15 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WizardState } from '@/types/wizard';
 import { CDN } from '@/lib/pricing/data';
-import {
-  DIELINE_SEMI_15G_BLANC,
-  DIELINE_SEMI_15G_NOIR,
-  DIELINE_SEMI_15G_TRANSPARENT,
-  FlatDieline,
-  type DielineConfig,
-} from './FlatDieline';
 
 type PreviewMode = '3d' | 'flat';
+
+interface FlatMockup {
+  url: string;
+  alt: string;
+}
 
 // =====================================================
 // Compositeur de prévisualisation logo (niveau 1).
@@ -62,27 +60,37 @@ const SEMI_15G_TRANSPARENT: MockupBackground = {
  * et 10g semi, on remontera des mockups plus tard quand David aura
  * fourni les visuels packaging dédiés.
  */
-/**
- * Sélectionne les dielines à plat disponibles selon la config wizard.
- * Pour le MVP : 15g semi-perso (blanc / noir / transparent) — couvert
- * par 15g Thé Blanc - Maquette.pdf. Pour les autres combos, on retombera
- * sur le placeholder « bientôt disponible ».
- */
-function selectDielines(state: WizardState): DielineConfig[] {
+const MAQUETTE_15G_BLANC: FlatMockup = {
+  url: `${CDN}15gBlanc.png?v=1688637933`,
+  alt: 'Maquette 15g · packaging blanc',
+};
+const MAQUETTE_15G_NOIR: FlatMockup = {
+  url: `${CDN}15gNoir.png?v=1688640569`,
+  alt: 'Maquette 15g · packaging noir',
+};
+const MAQUETTE_10G_BLANC: FlatMockup = {
+  url: `${CDN}10gBlanc.png?v=1688722926`,
+  alt: 'Maquette 10g · packaging blanc',
+};
+const MAQUETTE_10G_NOIR: FlatMockup = {
+  url: `${CDN}10gNoir.png?v=1688722925`,
+  alt: 'Maquette 10g · packaging noir',
+};
+
+function selectFlatMockups(state: WizardState): FlatMockup[] {
   if (state.persoLevel !== 'Semi-perso' && state.persoLevel !== 'Full perso') {
     return [];
   }
   if (state.grammage === '15 grammes') {
-    if (state.packagingId === 'semi-15g-noir') return [DIELINE_SEMI_15G_NOIR];
-    if (state.packagingId === 'semi-15g-transparent')
-      return [DIELINE_SEMI_15G_TRANSPARENT];
-    if (state.packagingId === 'semi-15g-blanc') return [DIELINE_SEMI_15G_BLANC];
-    // Pas encore de packaging choisi → on montre les 3.
-    return [
-      DIELINE_SEMI_15G_BLANC,
-      DIELINE_SEMI_15G_NOIR,
-      DIELINE_SEMI_15G_TRANSPARENT,
-    ];
+    if (state.packagingId === 'semi-15g-noir') return [MAQUETTE_15G_NOIR];
+    if (state.packagingId === 'semi-15g-blanc') return [MAQUETTE_15G_BLANC];
+    if (state.packagingId === 'semi-15g-transparent') return [];
+    return [MAQUETTE_15G_BLANC, MAQUETTE_15G_NOIR];
+  }
+  if (state.grammage === '10 grammes') {
+    if (state.packagingId === 'semi-10g-noir-tv') return [MAQUETTE_10G_NOIR];
+    if (state.packagingId === 'semi-10g-blanc-tb') return [MAQUETTE_10G_BLANC];
+    return [MAQUETTE_10G_BLANC, MAQUETTE_10G_NOIR];
   }
   return [];
 }
@@ -124,7 +132,7 @@ function isRenderableLogo(file: File): boolean {
 export function LogoMockupPreview({ state }: { state: WizardState }) {
   const file = state.attachmentFile;
   const backgrounds = useMemo(() => selectBackgrounds(state), [state]);
-  const dielines = useMemo(() => selectDielines(state), [state]);
+  const flatMockups = useMemo(() => selectFlatMockups(state), [state]);
 
   // Object URL stable pour la durée du fichier (révoqué quand le fichier change).
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -159,7 +167,7 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
   return (
     <MockupPreviewBody
       backgrounds={backgrounds}
-      dielines={dielines}
+      flatMockups={flatMockups}
       logoUrl={logoUrl}
     />
   );
@@ -167,11 +175,11 @@ export function LogoMockupPreview({ state }: { state: WizardState }) {
 
 function MockupPreviewBody({
   backgrounds,
-  dielines,
+  flatMockups,
   logoUrl,
 }: {
   backgrounds: MockupBackground[];
-  dielines: DielineConfig[];
+  flatMockups: FlatMockup[];
   logoUrl: string | null;
 }) {
   const [mode, setMode] = useState<PreviewMode>('3d');
@@ -208,7 +216,7 @@ function MockupPreviewBody({
               : 'text-ink-soft hover:text-ink'
           }`}
         >
-          Vue à plat
+          Maquette
         </button>
       </div>
 
@@ -226,26 +234,39 @@ function MockupPreviewBody({
             <MockupCanvas key={bg.url} bg={bg} logoUrl={logoUrl} />
           ))}
         </div>
-      ) : dielines.length > 0 ? (
+      ) : flatMockups.length > 0 ? (
         <div
           className={`grid gap-4 ${
-            dielines.length === 1
+            flatMockups.length === 1
               ? 'grid-cols-1'
               : 'grid-cols-1 lg:grid-cols-2'
           }`}
         >
-          {dielines.map((d) => (
-            <FlatDieline key={d.label} config={d} logoUrl={logoUrl} />
+          {flatMockups.map((m) => (
+            <figure key={m.url} className="space-y-1.5">
+              <div className="w-full rounded-[var(--qw-input-radius)] overflow-hidden bg-white border border-[var(--qw-cream-strong)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={m.url}
+                  alt={m.alt}
+                  loading="lazy"
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+              <figcaption className="text-[11px] text-ink-soft text-center">
+                {m.alt}
+              </figcaption>
+            </figure>
           ))}
         </div>
       ) : (
-        <FlatMockupPlaceholder />
+        <MaquettePlaceholder />
       )}
     </section>
   );
 }
 
-function FlatMockupPlaceholder() {
+function MaquettePlaceholder() {
   return (
     <div
       className="rounded-[var(--qw-input-radius)] p-6 sm:p-10 text-center space-y-2"
@@ -254,12 +275,11 @@ function FlatMockupPlaceholder() {
         border: '1px dashed var(--qw-cream-strong)',
       }}
     >
-      <div className="text-sm font-semibold text-ink">Vue à plat — bientôt disponible</div>
+      <div className="text-sm font-semibold text-ink">Maquette — bientôt disponible</div>
       <p className="text-xs text-ink-soft max-w-prose mx-auto">
-        Une maquette technique à plat (dieline Illustrator) avec ton logo positionné
-        sur l&apos;emballage déplié sera disponible ici très prochainement.
-        Cela te permettra de visualiser <em>exactement</em> les marges et la zone
-        d&apos;impression avant production.
+        Une maquette technique à plat (dieline Illustrator) sera disponible ici très
+        prochainement pour cette configuration. Cela te permettra de visualiser
+        <em> exactement</em> les marges et la zone d&apos;impression avant production.
       </p>
     </div>
   );
